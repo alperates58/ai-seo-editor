@@ -866,6 +866,7 @@
 	}
 
 	function applyEditorContent(content) {
+		content = cleanGeneratedHtml(content);
 		if (window.wp?.data?.dispatch) {
 			const editor = window.wp.data.dispatch('core/editor');
 			if (editor?.editPost) {
@@ -886,6 +887,16 @@
 			textarea.dispatchEvent(new Event('input', { bubbles: true }));
 			textarea.dispatchEvent(new Event('change', { bubbles: true }));
 		}
+	}
+
+	function cleanGeneratedHtml(html) {
+		return String(html || '')
+			.trim()
+			.replace(/^\s*```(?:html|HTML)?\s*/, '')
+			.replace(/\s*```\s*$/, '')
+			.replace(/^\s*(?:<!doctype\s+html[^>]*>|<html[^>]*>|<body[^>]*>)/i, '')
+			.replace(/(?:<\/body>|<\/html>)\s*$/i, '')
+			.trim();
 	}
 
 	function applyEditorTitle(title) {

@@ -48,7 +48,7 @@ class AISEO_Article_Generator {
 	}
 
 	public function create_draft( array $generation_result, array $params ): int {
-		$content    = wp_kses_post( $generation_result['content'] ?? '' );
+		$content    = $this->clean_generated_html( $generation_result['content'] ?? '' );
 		$title      = sanitize_text_field( $generation_result['title'] ?? ( $params['title'] ?? __( 'Taslak Makale', 'ai-seo-editor' ) ) );
 		$keyword    = sanitize_text_field( $generation_result['focus_keyword'] ?? '' );
 		$meta_desc  = sanitize_textarea_field( $generation_result['meta_description'] ?? '' );
@@ -94,11 +94,11 @@ class AISEO_Article_Generator {
 		$content = $result['content'] ?? [];
 
 		if ( is_string( $content ) ) {
-			return wp_kses_post( $content );
+			return $this->clean_generated_html( $content );
 		}
 
 		if ( ! empty( $content['introduction'] ) ) {
-			$html .= wp_kses_post( $content['introduction'] ) . "\n\n";
+			$html .= $this->clean_generated_html( $content['introduction'] ) . "\n\n";
 		}
 
 		if ( ! empty( $content['sections'] ) ) {
@@ -107,7 +107,7 @@ class AISEO_Article_Generator {
 					$html .= '<h2>' . esc_html( $section['heading'] ) . '</h2>' . "\n";
 				}
 				if ( ! empty( $section['content'] ) ) {
-					$html .= wp_kses_post( $section['content'] ) . "\n\n";
+					$html .= $this->clean_generated_html( $section['content'] ) . "\n\n";
 				}
 				if ( ! empty( $section['subsections'] ) ) {
 					foreach ( $section['subsections'] as $sub ) {
@@ -115,7 +115,7 @@ class AISEO_Article_Generator {
 							$html .= '<h3>' . esc_html( $sub['heading'] ) . '</h3>' . "\n";
 						}
 						if ( ! empty( $sub['content'] ) ) {
-							$html .= wp_kses_post( $sub['content'] ) . "\n\n";
+							$html .= $this->clean_generated_html( $sub['content'] ) . "\n\n";
 						}
 					}
 				}
@@ -124,7 +124,7 @@ class AISEO_Article_Generator {
 
 		if ( ! empty( $content['conclusion'] ) ) {
 			$html .= '<h2>' . esc_html__( 'Sonuç', 'ai-seo-editor' ) . '</h2>' . "\n";
-			$html .= wp_kses_post( $content['conclusion'] ) . "\n\n";
+			$html .= $this->clean_generated_html( $content['conclusion'] ) . "\n\n";
 		}
 
 		if ( ! empty( $content['faq'] ) ) {
@@ -136,5 +136,15 @@ class AISEO_Article_Generator {
 		}
 
 		return $html;
+	}
+
+	private function clean_generated_html( string $html ): string {
+		$html = trim( $html );
+		$html = preg_replace( '/^\s*```(?:html|HTML)?\s*/', '', $html );
+		$html = preg_replace( '/\s*```\s*$/', '', $html );
+		$html = preg_replace( '/^\s*(?:<!doctype\s+html[^>]*>|<html[^>]*>|<body[^>]*>)/i', '', $html );
+		$html = preg_replace( '/(?:<\/body>|<\/html>)\s*$/i', '', $html );
+
+		return wp_kses_post( trim( $html ) );
 	}
 }
