@@ -115,7 +115,20 @@ class AISEO_Rest_Controller {
 		] );
 	}
 
-	public function check_permissions(): bool|WP_Error {
+	public function check_permissions( ?WP_REST_Request $request = null ): bool|WP_Error {
+		$post_id = $request instanceof WP_REST_Request ? absint( $request->get_param( 'post_id' ) ) : 0;
+
+		if ( $post_id > 0 && current_user_can( 'edit_post', $post_id ) ) {
+			return true;
+		}
+
+		if ( ! $post_id && $request instanceof WP_REST_Request ) {
+			$route = $request->get_route();
+			if ( str_contains( $route, '/generate' ) && current_user_can( 'edit_posts' ) ) {
+				return true;
+			}
+		}
+
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return new WP_Error(
 				'aiseo_forbidden',

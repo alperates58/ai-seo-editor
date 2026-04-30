@@ -1031,7 +1031,11 @@
 		initEditorPanel();
 	}
 
-	document.addEventListener('DOMContentLoaded', init);
+	if (document.readyState === 'loading') {
+		document.addEventListener('DOMContentLoaded', init);
+	} else {
+		init();
+	}
 
 	window.AISeo = { API, UI };
 })();
