@@ -84,7 +84,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 						<span class="aiseo-badge aiseo-badge--none">—</span>
 					<?php endif; ?>
 				</td>
-				<td>
+				<td id="analysis-date-<?php echo esc_attr( $post->ID ); ?>">
 					<?php echo $last_anal ? esc_html( human_time_diff( strtotime( $last_anal ) ) . ' önce' ) : '—'; ?>
 				</td>
 				<td>

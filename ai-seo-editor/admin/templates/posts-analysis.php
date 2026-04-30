@@ -76,14 +76,14 @@ $total_pages = (int) ceil( $total / $per_page );
 					</span>
 				</td>
 				<td><?php echo esc_html( $keyword ?: '—' ); ?></td>
-				<td class="aiseo-score-cell" data-score="<?php echo esc_attr( $seo_score ); ?>">
+				<td class="aiseo-score-cell aiseo-seo-score-cell" data-score="<?php echo esc_attr( $seo_score ); ?>">
 					<?php if ( $seo_score > 0 ) : ?>
 						<?php echo wp_kses_post( aiseo_score_badge( $seo_score ) ); ?>
 					<?php else : ?>
 						<span class="aiseo-badge aiseo-badge--none">—</span>
 					<?php endif; ?>
 				</td>
-				<td>
+				<td class="aiseo-read-score-cell" data-score="<?php echo esc_attr( $read_score ); ?>">
 					<?php if ( $read_score > 0 ) : ?>
 						<?php echo wp_kses_post( aiseo_score_badge( $read_score ) ); ?>
 					<?php else : ?>

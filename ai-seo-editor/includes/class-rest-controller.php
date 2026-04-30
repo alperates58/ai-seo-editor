@@ -233,7 +233,9 @@ class AISEO_Rest_Controller {
 					'post_id'           => $post_id,
 					'seo_score'         => $result['seo_score'] ?? 0,
 					'readability_score' => $result['readability_score'] ?? 0,
+					'last_analysis'     => $result['analyzed_at'] ?? get_post_meta( $post_id, '_aiseo_last_analysis', true ),
 					'success'           => ! isset( $result['error'] ),
+					'error'             => $result['error'] ?? '',
 				];
 			}
 		}
@@ -345,18 +347,23 @@ class AISEO_Rest_Controller {
 			return new WP_Error( 'aiseo_missing_param', __( 'Öneri ID listesi boş.', 'ai-seo-editor' ), [ 'status' => 422 ] );
 		}
 
-		$post = get_post( $post_id );
-		wp_save_post_revision( $post_id );
-
 		$client  = new AISEO_OpenAI_Client( $this->settings );
 		$linker  = new AISEO_Internal_Linker( $client, $this->logger );
 		$new_content = $linker->apply_suggestions( $post_id, $suggestion_ids );
 
-		if ( $new_content !== $post->post_content ) {
-			wp_update_post( [ 'ID' => $post_id, 'post_content' => $new_content ] );
+		if ( empty( $new_content ) ) {
+			return new WP_Error( 'aiseo_apply_error', __( 'İç linkler hazırlanamadı.', 'ai-seo-editor' ), [ 'status' => 500 ] );
 		}
 
-		return $this->ok( [], __( 'İç linkler uygulandı.', 'ai-seo-editor' ) );
+		return $this->ok(
+			[
+				'post_id'  => $post_id,
+				'content'  => $new_content,
+				'edit_url' => admin_url( 'post.php?post=' . $post_id . '&action=edit' ),
+				'changed'  => $new_content !== get_post_field( 'post_content', $post_id ),
+			],
+			__( 'İç linkler editörde uygulanmak üzere hazırlandı.', 'ai-seo-editor' )
+		);
 	}
 
 	public function get_logs( WP_REST_Request $request ): WP_REST_Response {

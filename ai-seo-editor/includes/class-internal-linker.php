@@ -69,7 +69,7 @@ class AISEO_Internal_Linker {
 
 		$this->save_suggestions( $post_id, $suggestions );
 
-		return $suggestions;
+		return $this->get_cached( $post_id );
 	}
 
 	public function get_cached( int $post_id ): array {
@@ -81,7 +81,18 @@ class AISEO_Internal_Linker {
 			),
 			ARRAY_A
 		);
-		return $rows ?: [];
+		if ( empty( $rows ) ) {
+			return [];
+		}
+
+		foreach ( $rows as &$row ) {
+			$target_post = get_post( (int) $row['target_post_id'] );
+			$row['target_title'] = $target_post instanceof WP_Post ? $target_post->post_title : '';
+			$row['target_url']   = $target_post instanceof WP_Post ? get_permalink( $target_post ) : '';
+		}
+		unset( $row );
+
+		return $rows;
 	}
 
 	public function apply_suggestions( int $post_id, array $suggestion_ids ): string {

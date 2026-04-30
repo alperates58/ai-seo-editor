@@ -20,7 +20,13 @@
 			};
 			if (body) options.body = JSON.stringify(body);
 			const res = await fetch(restUrl + 'aiseo/v1' + endpoint, options);
-			const json = await res.json();
+			const text = await res.text();
+			let json = {};
+			try {
+				json = text ? JSON.parse(text) : {};
+			} catch (e) {
+				json = { message: text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() };
+			}
 			if (!res.ok) throw json;
 			return json;
 		},
@@ -149,8 +155,10 @@
 					const data = res.data || {};
 					const row  = btn.closest('tr');
 					if (row) {
-						const seoCell  = row.querySelector('.aiseo-score-cell');
+						const seoCell  = row.querySelector('.aiseo-seo-score-cell');
+						const readCell = row.querySelector('.aiseo-read-score-cell');
 						if (seoCell) seoCell.innerHTML = scoreBadge(data.seo_score || 0);
+						if (readCell) readCell.innerHTML = scoreBadge(data.readability_score || 0);
 					}
 					UI.notice('aiseo-posts-notice', 'Analiz tamamlandı. SEO: ' + (data.seo_score || 0), 'success');
 				} catch (e) {
@@ -283,6 +291,8 @@
 
 			const total     = selected.length;
 			let processed   = 0;
+			let succeeded   = 0;
+			let failed      = 0;
 			const batchSize = 5;
 
 			for (let i = 0; i < selected.length; i += batchSize) {
@@ -290,11 +300,18 @@
 				try {
 					const res = await API.bulkAnalyze(batch);
 					(res.data?.results || []).forEach((r) => {
-						UI.updateScoreBadge(r.post_id, r.seo_score, r.readability_score);
+						if (r.success) {
+							UI.updateScoreBadge(r.post_id, r.seo_score, r.readability_score);
+							updateBulkRow(r);
+							succeeded++;
+						} else {
+							failed++;
+						}
 						processed++;
 					});
 				} catch (e) {
 					processed += batch.length;
+					failed += batch.length;
 				}
 				const pct = Math.round((processed / total) * 100);
 				if (progressBar) progressBar.style.width = pct + '%';
@@ -309,6 +326,15 @@
 	/* ------------------------------------------------------------------ */
 	/* Article Generator                                                    */
 	/* ------------------------------------------------------------------ */
+	function updateBulkRow(result) {
+		const row = document.querySelector('#aiseo-bulk-table tr[data-post-id="' + result.post_id + '"]');
+		if (!row) return;
+		row.dataset.scoreColor = scoreColor(result.seo_score || 0);
+
+		const lastCell = document.getElementById('analysis-date-' + result.post_id);
+		if (lastCell) lastCell.textContent = 'şimdi';
+	}
+
 	let lastGenerationResult = null;
 
 	function initArticleGenerator() {
@@ -458,7 +484,8 @@
 			applyBtn.addEventListener('click', async () => {
 				const postId = postSelect?.value;
 				const selected = Array.from(document.querySelectorAll('.aiseo-link-select:checked'))
-					.map((cb) => parseInt(cb.value));
+					.map((cb) => parseInt(cb.value))
+					.filter((id) => Number.isFinite(id) && id > 0);
 
 				if (!postId || !selected.length) {
 					UI.notice('aiseo-links-notice', 'Önce yazı seçin ve link önerilerini işaretleyin.', 'warning');
@@ -469,7 +496,15 @@
 
 				UI.loading(applyBtn, true);
 				try {
-					await API.applyLinks(postId, selected);
+					const res = await API.applyLinks(postId, selected);
+					const data = res.data || {};
+					if (!data.changed) {
+						UI.notice('aiseo-links-notice', 'Seçili anchor metni yazı içinde bulunamadı; editöre aktarılacak bir değişiklik yok.', 'warning');
+						return;
+					}
+					localStorage.setItem('aiseo_pending_link_content_' + postId, data.content || '');
+					window.location.href = data.edit_url;
+					return;
 					UI.notice('aiseo-links-notice', 'İç linkler başarıyla eklendi!', 'success');
 					if (resultsEl) resultsEl.style.display = 'none';
 				} catch (e) {
@@ -499,6 +534,35 @@
 				'<td>' + scoreBadge(pct) + '</td>';
 			tbody.appendChild(row);
 		});
+	}
+
+	function initPendingLinkContent() {
+		const params = new URLSearchParams(window.location.search);
+		const postId = params.get('post');
+		if (!postId) return;
+
+		const key = 'aiseo_pending_link_content_' + postId;
+		const content = localStorage.getItem(key);
+		if (!content) return;
+
+		const applyContent = () => {
+			if (window.wp?.data?.dispatch) {
+				window.wp.data.dispatch('core/editor').editPost({ content });
+				localStorage.removeItem(key);
+				window.alert('İç linkler editöre eklendi. Kontrol edip Güncelle butonuyla kaydedebilirsiniz.');
+				return;
+			}
+
+			const textarea = document.getElementById('content');
+			if (textarea) {
+				textarea.value = content;
+				textarea.dispatchEvent(new Event('input', { bubbles: true }));
+				localStorage.removeItem(key);
+				window.alert('İç linkler editöre eklendi. Kontrol edip kaydedebilirsiniz.');
+			}
+		};
+
+		setTimeout(applyContent, 800);
 	}
 
 	/* ------------------------------------------------------------------ */
@@ -649,6 +713,7 @@
 
 		// Also init optimize buttons on any page (post detail is embedded in posts page)
 		initPostDetailOptimize();
+		initPendingLinkContent();
 	}
 
 	document.addEventListener('DOMContentLoaded', init);
