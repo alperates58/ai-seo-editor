@@ -47,6 +47,12 @@ class AISEO_Rest_Controller {
 			'permission_callback' => [ $this, 'check_permissions' ],
 		] );
 
+		register_rest_route( self::NAMESPACE, '/regenerate/(?P<post_id>\d+)', [
+			'methods'             => WP_REST_Server::CREATABLE,
+			'callback'            => [ $this, 'regenerate_post' ],
+			'permission_callback' => [ $this, 'check_permissions' ],
+		] );
+
 		register_rest_route( self::NAMESPACE, '/optimize/apply', [
 			'methods'             => WP_REST_Server::CREATABLE,
 			'callback'            => [ $this, 'apply_optimization' ],
@@ -264,6 +270,59 @@ class AISEO_Rest_Controller {
 		);
 	}
 
+	public function regenerate_post( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+		$post_id = absint( $request->get_param( 'post_id' ) );
+		if ( ! $this->post_exists( $post_id ) ) {
+			return $this->not_found();
+		}
+
+		$this->check_token_budget();
+
+		$post    = get_post( $post_id );
+		$yoast   = new AISEO_Yoast_Integration();
+		$keyword = $yoast->get_focus_keyword( $post_id );
+		$title   = $post instanceof WP_Post ? $post->post_title : '';
+
+		if ( empty( $keyword ) ) {
+			$keyword = $title;
+		}
+		if ( empty( $keyword ) ) {
+			return new WP_Error( 'aiseo_missing_param', __( 'BaÅŸtan oluÅŸturmak iÃ§in baÅŸlÄ±k veya odak kelime gereklidir.', 'ai-seo-editor' ), [ 'status' => 422 ] );
+		}
+
+		$categories = wp_get_post_categories( $post_id );
+		$content    = $post instanceof WP_Post ? $post->post_content : '';
+
+		$params = [
+			'keyword'      => $keyword,
+			'title'        => $title,
+			'tone'         => $this->settings->get( 'default_tone' ),
+			'language'     => $this->settings->get( 'default_language' ),
+			'target_words' => max( 800, min( 2500, aiseo_count_words( $content ) ?: 1200 ) ),
+			'include_faq'  => true,
+			'category'     => ! empty( $categories ) ? (int) $categories[0] : 0,
+		];
+
+		$client    = new AISEO_OpenAI_Client( $this->settings );
+		$generator = new AISEO_Article_Generator( $client, $this->logger );
+		$result    = $generator->generate( $params );
+
+		if ( empty( $result['success'] ) ) {
+			return new WP_Error( 'aiseo_regenerate_error', $result['error'] ?? __( 'Makale baÅŸtan oluÅŸturulamadÄ±.', 'ai-seo-editor' ), [ 'status' => 500 ] );
+		}
+
+		return $this->ok(
+			[
+				'post_id' => $post_id,
+				'title'   => $result['title'] ?? $title,
+				'content' => $result['content'] ?? '',
+				'meta'    => $result['meta_description'] ?? '',
+				'tags'    => $result['suggested_tags'] ?? [],
+			],
+			__( 'Makale baÅŸtan oluÅŸturuldu.', 'ai-seo-editor' )
+		);
+	}
+
 	public function apply_optimization( WP_REST_Request $request ): WP_REST_Response|WP_Error {
 		$post_id   = absint( $request->get_param( 'post_id' ) );
 		$operation = sanitize_key( $request->get_param( 'operation' ) ?? '' );
@@ -359,6 +418,7 @@ class AISEO_Rest_Controller {
 		$keyword  = sanitize_text_field( $request->get_param( 'focus_keyword' ) ?? '' );
 		$meta     = sanitize_textarea_field( $request->get_param( 'meta_description' ) ?? '' );
 		$category = absint( $request->get_param( 'category' ) ?? 0 );
+		$tags     = array_map( 'sanitize_text_field', (array) ( $request->get_param( 'suggested_tags' ) ?? [] ) );
 
 		if ( empty( $content ) || empty( $title ) ) {
 			return new WP_Error( 'aiseo_missing_param', __( 'Başlık ve içerik zorunludur.', 'ai-seo-editor' ), [ 'status' => 422 ] );
@@ -373,6 +433,7 @@ class AISEO_Rest_Controller {
 				'title'            => $title,
 				'focus_keyword'    => $keyword,
 				'meta_description' => $meta,
+				'suggested_tags'   => $tags,
 			],
 			[ 'category' => $category ]
 		);

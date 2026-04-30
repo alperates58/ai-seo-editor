@@ -145,6 +145,7 @@ class AISEO_Admin {
 			<div class="aiseo-editor-actions">
 				<button type="button" class="button button-secondary" id="aiseo-editor-analyze"><?php esc_html_e( 'Analiz Et', 'ai-seo-editor' ); ?></button>
 				<button type="button" class="button button-primary" id="aiseo-editor-fix-all"><?php esc_html_e( 'Tamamını Düzelt', 'ai-seo-editor' ); ?></button>
+				<button type="button" class="button button-secondary" id="aiseo-editor-regenerate"><?php esc_html_e( 'Baştan Oluştur', 'ai-seo-editor' ); ?></button>
 			</div>
 
 			<div class="aiseo-editor-quick">

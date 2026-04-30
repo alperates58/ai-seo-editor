@@ -34,6 +34,7 @@
 		getAnalysis:      (pid)        => API.request('/analyze/' + pid),
 		optimize:         (pid, op)    => API.request('/optimize', 'POST', { post_id: pid, operation: op }),
 		fullOptimize:     (pid)        => API.request('/optimize/full', 'POST', { post_id: pid }),
+		regeneratePost:   (pid)        => API.request('/regenerate/' + pid, 'POST'),
 		applyOptimize:    (data)       => API.request('/optimize/apply', 'POST', data),
 		bulkAnalyze:      (ids)        => API.request('/bulk-analyze', 'POST', { post_ids: ids }),
 		generateArticle:  (params)     => API.request('/generate', 'POST', params),
@@ -634,6 +635,30 @@
 				return;
 			}
 
+			if (button.id === 'aiseo-editor-regenerate') {
+				event.preventDefault();
+				if (!confirm('Mevcut yazı baştan oluşturulsun mu? Öneri editöre aktarılacak, kaydı siz yapacaksınız.')) return;
+				UI.loading(button, true);
+				try {
+					const res = await API.regeneratePost(postId);
+					const data = res.data || {};
+					data.steps = [
+						{
+							operation: 'regenerate_article',
+							success: true,
+							before: getEditorContent(),
+							after: data.content || '',
+						},
+					];
+					renderEditorFullSuggestion(preview, data);
+				} catch (e) {
+					UI.notice('aiseo-editor-notice', e.message || i18n.error, 'error');
+				} finally {
+					UI.loading(button, false);
+				}
+				return;
+			}
+
 			if (button.dataset.aiseoAction === 'apply-suggestion') {
 				event.preventDefault();
 				if (!editorSuggestionState) return;
@@ -649,6 +674,7 @@
 				if (data.title) applyEditorTitle(data.title);
 				if (data.content) applyEditorContent(data.content);
 				if (data.meta) localStorage.setItem('aiseo_pending_meta_' + (data.post_id || Config.postId), data.meta);
+				if (data.tags) applyEditorTags(data.tags);
 				UI.notice('aiseo-editor-notice', 'Tam düzeltme editöre aktarıldı. Kontrol edip Güncelle ile kaydedin.', 'success');
 			}
 		});
@@ -781,9 +807,13 @@
 		editorFullSuggestionState = data;
 		const okSteps = (data.steps || []).filter((step) => step.success);
 		const failedSteps = (data.steps || []).filter((step) => !step.success);
+		const tagPreview = Array.isArray(data.tags) && data.tags.length
+			? '<p class="aiseo-editor-help">Etiketler: ' + escapeHtml(data.tags.join(', ')) + '</p>'
+			: '';
 		container.innerHTML = '<div class="aiseo-editor-suggestion">' +
 			'<h4>Tam Düzeltme Hazır</h4>' +
 			'<p class="aiseo-editor-help">' + okSteps.length + ' öneri hazırlandı' + (failedSteps.length ? ', ' + failedSteps.length + ' öneri üretilemedi' : '') + '.</p>' +
+			tagPreview +
 			'<ul class="aiseo-editor-step-list">' + (data.steps || []).map((step) =>
 				'<li class="' + (step.success ? 'is-ok' : 'is-error') + '">' + escapeHtml(editorOperationLabel(step.operation)) + '</li>'
 			).join('') + '</ul>' +
@@ -797,6 +827,7 @@
 			if (data.title) applyEditorTitle(data.title);
 			if (data.content) applyEditorContent(data.content);
 			if (data.meta) localStorage.setItem('aiseo_pending_meta_' + (data.post_id || Config.postId), data.meta);
+			if (data.tags) applyEditorTags(data.tags);
 			UI.notice('aiseo-editor-notice', 'Tam düzeltme editöre aktarıldı. Kontrol edip Güncelle ile kaydedin.', 'success');
 		});
 	}
@@ -873,6 +904,29 @@
 		}
 	}
 
+	function applyEditorTags(tags) {
+		const cleanTags = Array.from(new Set((Array.isArray(tags) ? tags : [])
+			.map((tag) => String(tag || '').trim())
+			.filter(Boolean)));
+		if (!cleanTags.length) return;
+
+		const tagString = cleanTags.join(', ');
+		const tagInput = document.getElementById('new-tag-post_tag');
+		const tagsBox = document.getElementById('tagsdiv-post_tag');
+		if (tagInput && tagsBox && window.tagBox?.flushTags) {
+			tagInput.value = tagString;
+			window.tagBox.flushTags(tagsBox, false, 1);
+			return;
+		}
+
+		const taxInput = document.getElementById('tax-input-post_tag') || document.querySelector('[name="tax_input[post_tag]"]');
+		if (taxInput) {
+			const current = taxInput.value ? taxInput.value.split(',').map((tag) => tag.trim()).filter(Boolean) : [];
+			taxInput.value = Array.from(new Set(current.concat(cleanTags))).join(', ');
+			taxInput.dispatchEvent(new Event('change', { bubbles: true }));
+		}
+	}
+
 	function replaceIntro(content, intro) {
 		if (/<p[^>]*>.*?<\/p>/is.test(content)) {
 			return content.replace(/<p[^>]*>.*?<\/p>/is, '<p>' + escapeHtml(intro) + '</p>');
@@ -889,6 +943,7 @@
 			improve_keyword_density: 'Keyword Dağılımı',
 			add_faq: 'FAQ Ekleme',
 			improve_conclusion: 'Sonuç Bölümü',
+			regenerate_article: 'Baştan Oluşturma',
 			post_content: 'İçerik',
 			append_content: 'İçeriğe Ekleme',
 			meta: 'Meta Açıklama',
