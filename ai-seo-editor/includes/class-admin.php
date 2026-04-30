@@ -32,7 +32,7 @@ class AISEO_Admin {
 			$this->menu_slug,
 			[ $this, 'page_dashboard' ],
 			'dashicons-chart-area',
-			76
+			'30.1'
 		);
 
 		add_submenu_page(
