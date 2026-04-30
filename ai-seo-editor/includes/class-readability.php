@@ -281,6 +281,27 @@ class AISEO_Readability {
 			__( 'Metin gereksiz yere karmaşık kelimeler içeriyor.', 'ai-seo-editor' ), $ratio );
 	}
 
+	private function result( string $id, string $status, string $message, mixed $value = null ): array {
+		$labels = [
+			'sentence_length'         => __( 'Cümle uzunluğu', 'ai-seo-editor' ),
+			'paragraph_length'        => __( 'Paragraf uzunluğu', 'ai-seo-editor' ),
+			'passive_voice'           => __( 'Pasif anlatım', 'ai-seo-editor' ),
+			'transition_words'        => __( 'Geçiş kelimeleri', 'ai-seo-editor' ),
+			'consecutive_sentences'   => __( 'Tekrarlı cümle başlangıcı', 'ai-seo-editor' ),
+			'subheading_distribution' => __( 'Alt başlık dağılımı', 'ai-seo-editor' ),
+			'flesch_reading_ease'     => __( 'Okuma kolaylığı', 'ai-seo-editor' ),
+			'text_complexity'         => __( 'Kelime karmaşıklığı', 'ai-seo-editor' ),
+		];
+
+		return [
+			'id'      => $id,
+			'label'   => $labels[ $id ] ?? $id,
+			'status'  => $status,
+			'message' => $message,
+			'value'   => $value,
+		];
+	}
+
 	private function split_sentences( string $text ): array {
 		$text      = preg_replace( '/\s+/', ' ', trim( $text ) );
 		$sentences = preg_split( '/(?<=[.!?…])\s+(?=[A-ZÇĞİŞÖÜa-zçğışöü])/u', $text, -1, PREG_SPLIT_NO_EMPTY );
