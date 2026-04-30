@@ -319,7 +319,7 @@
 			}
 
 			UI.loading(startBtn, false);
-			UI.notice('aiseo-bulk-notice', i18n.bulkDone || 'Toplu analiz tamamlandı!', 'success');
+			UI.notice('aiseo-bulk-notice', 'Toplu analiz tamamlandı. Başarılı: ' + succeeded + ', hata: ' + failed + '.', failed ? 'warning' : 'success');
 		});
 	}
 
@@ -492,7 +492,7 @@
 					return;
 				}
 
-				if (!confirm('Seçili iç linkleri yazıya eklemek istiyor musunuz? Revision otomatik oluşturulacak.')) return;
+				if (!confirm('Seçili iç linkleri yazının editöründe hazırlayayım mı? Son kaydı siz yapacaksınız.')) return;
 
 				UI.loading(applyBtn, true);
 				try {
@@ -504,9 +504,6 @@
 					}
 					localStorage.setItem('aiseo_pending_link_content_' + postId, data.content || '');
 					window.location.href = data.edit_url;
-					return;
-					UI.notice('aiseo-links-notice', 'İç linkler başarıyla eklendi!', 'success');
-					if (resultsEl) resultsEl.style.display = 'none';
 				} catch (e) {
 					UI.notice('aiseo-links-notice', e.message || i18n.error, 'error');
 				} finally {
@@ -660,7 +657,13 @@
 					credentials: 'same-origin',
 					body: data,
 				});
-				const json = await res.json();
+				const text = await res.text();
+				let json = {};
+				try {
+					json = text ? JSON.parse(text) : {};
+				} catch (e) {
+					json = { success: false, data: { message: text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() } };
+				}
 				resultEl.textContent = json.data?.message || (json.success ? 'GitHub bağlantısı başarılı.' : 'GitHub sürümü okunamadı.');
 				resultEl.className = 'aiseo-muted-inline ' + (json.success ? 'aiseo-text-success' : 'aiseo-text-error');
 			} catch (e) {

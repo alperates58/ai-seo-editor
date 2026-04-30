@@ -28,7 +28,7 @@ class AISEO_Analyzer {
 			$logger = AISEO_Plugin::get_instance()->get_logger();
 			$cached = $logger->get_cached_analysis( $post_id, $cache_hash );
 			if ( $cached ) {
-				return array_merge( $cached, [ 'from_cache' => true ] );
+				return $this->build_cached_result( $post_id, $data, $cached );
 			}
 		}
 
@@ -122,6 +122,61 @@ class AISEO_Analyzer {
 			$this->check_canonical_tag( $data ),
 			$this->check_og_tags( $data ),
 			$this->check_outbound_link_quality( $data ),
+		];
+	}
+
+	private function build_cached_result( int $post_id, array $data, array $cached ): array {
+		$criteria = is_array( $cached['criteria_data'] ?? null ) ? $cached['criteria_data'] : [];
+		$seo_ids  = [
+			'focus_keyword_present',
+			'keyword_in_title',
+			'keyword_in_meta_description',
+			'keyword_in_first_paragraph',
+			'keyword_in_url',
+			'keyword_density',
+			'title_length',
+			'meta_description_length',
+			'content_length',
+			'images_present',
+			'image_alt_text',
+			'internal_links',
+			'external_links',
+			'headings_structure',
+			'keyword_in_headings',
+			'schema_markup',
+			'canonical_tag',
+			'og_tags',
+			'outbound_link_quality',
+		];
+
+		$seo_criteria = [];
+		$readability_criteria = [];
+		foreach ( $criteria as $criterion ) {
+			$id = $criterion['id'] ?? '';
+			if ( in_array( $id, $seo_ids, true ) ) {
+				$seo_criteria[] = $criterion;
+			} else {
+				$readability_criteria[] = $criterion;
+			}
+		}
+
+		return [
+			'post_id'              => $post_id,
+			'post_title'           => $data['title'],
+			'permalink'            => $data['permalink'],
+			'keyword'              => $cached['focus_keyword'] ?? $data['keyword'],
+			'word_count'           => (int) ( $cached['word_count'] ?? $data['word_count'] ),
+			'keyword_density'      => (float) ( $cached['keyword_density'] ?? $data['keyword_density'] ),
+			'seo_score'            => (int) ( $cached['seo_score'] ?? 0 ),
+			'readability_score'    => (int) ( $cached['readability_score'] ?? 0 ),
+			'seo_criteria'         => $seo_criteria,
+			'readability_criteria' => $readability_criteria,
+			'internal_links'       => $data['links']['internal'] ?? [],
+			'external_links'       => $data['links']['external'] ?? [],
+			'images'               => $data['images'] ?? [],
+			'headings'             => $data['headings'] ?? [],
+			'from_cache'           => true,
+			'analyzed_at'          => $cached['analyzed_at'] ?? current_time( 'mysql' ),
 		];
 	}
 

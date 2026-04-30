@@ -10,9 +10,16 @@ if ( empty( $result ) || isset( $result['error'] ) ) {
 	return;
 }
 
-$seo_color  = aiseo_get_score_color( $result['seo_score'] );
-$read_color = aiseo_get_score_color( $result['readability_score'] );
+$seo_score  = (int) ( $result['seo_score'] ?? 0 );
+$read_score = (int) ( $result['readability_score'] ?? 0 );
+$seo_color  = aiseo_get_score_color( $seo_score );
+$read_color = aiseo_get_score_color( $read_score );
 $post_id    = (int) ( $result['post_id'] ?? $detail_post_id ?? 0 );
+$headings   = is_array( $result['headings'] ?? null ) ? $result['headings'] : [];
+$internal_links = is_array( $result['internal_links'] ?? null ) ? $result['internal_links'] : [];
+$images     = is_array( $result['images'] ?? null ) ? $result['images'] : [];
+$seo_criteria = is_array( $result['seo_criteria'] ?? null ) ? $result['seo_criteria'] : [];
+$readability_criteria = is_array( $result['readability_criteria'] ?? null ) ? $result['readability_criteria'] : [];
 ?>
 <div class="aiseo-detail-wrap" id="aiseo-post-detail" data-post-id="<?php echo esc_attr( $post_id ); ?>">
 
@@ -27,11 +34,11 @@ $post_id    = (int) ( $result['post_id'] ?? $detail_post_id ?? 0 );
 		</div>
 		<div class="aiseo-scores">
 			<div class="aiseo-score-circle aiseo-score-circle--<?php echo esc_attr( $seo_color ); ?>" title="<?php esc_attr_e( 'SEO Puanı', 'ai-seo-editor' ); ?>">
-				<span class="aiseo-score-circle__num"><?php echo esc_html( $result['seo_score'] ); ?></span>
+				<span class="aiseo-score-circle__num"><?php echo esc_html( $seo_score ); ?></span>
 				<span class="aiseo-score-circle__label"><?php esc_html_e( 'SEO', 'ai-seo-editor' ); ?></span>
 			</div>
 			<div class="aiseo-score-circle aiseo-score-circle--<?php echo esc_attr( $read_color ); ?>" title="<?php esc_attr_e( 'Okunabilirlik Puanı', 'ai-seo-editor' ); ?>">
-				<span class="aiseo-score-circle__num"><?php echo esc_html( $result['readability_score'] ); ?></span>
+				<span class="aiseo-score-circle__num"><?php echo esc_html( $read_score ); ?></span>
 				<span class="aiseo-score-circle__label"><?php esc_html_e( 'Okunab.', 'ai-seo-editor' ); ?></span>
 			</div>
 		</div>
@@ -71,10 +78,10 @@ $post_id    = (int) ( $result['post_id'] ?? $detail_post_id ?? 0 );
 		<div class="aiseo-card">
 			<h3 class="aiseo-card__title">
 				<?php esc_html_e( 'SEO Kriterleri', 'ai-seo-editor' ); ?>
-				<span class="aiseo-score-pill aiseo-score-pill--<?php echo esc_attr( $seo_color ); ?>"><?php echo esc_html( $result['seo_score'] ); ?>/100</span>
+				<span class="aiseo-score-pill aiseo-score-pill--<?php echo esc_attr( $seo_color ); ?>"><?php echo esc_html( $seo_score ); ?>/100</span>
 			</h3>
 			<div class="aiseo-criteria-list" id="aiseo-seo-criteria">
-				<?php foreach ( $result['seo_criteria'] as $criterion ) :
+				<?php foreach ( $seo_criteria as $criterion ) :
 					echo wp_kses_post( aiseo_render_criterion( $criterion ) );
 				endforeach; ?>
 			</div>
@@ -84,10 +91,10 @@ $post_id    = (int) ( $result['post_id'] ?? $detail_post_id ?? 0 );
 		<div class="aiseo-card">
 			<h3 class="aiseo-card__title">
 				<?php esc_html_e( 'Okunabilirlik Kriterleri', 'ai-seo-editor' ); ?>
-				<span class="aiseo-score-pill aiseo-score-pill--<?php echo esc_attr( $read_color ); ?>"><?php echo esc_html( $result['readability_score'] ); ?>/100</span>
+				<span class="aiseo-score-pill aiseo-score-pill--<?php echo esc_attr( $read_color ); ?>"><?php echo esc_html( $read_score ); ?>/100</span>
 			</h3>
 			<div class="aiseo-criteria-list" id="aiseo-readability-criteria">
-				<?php foreach ( $result['readability_criteria'] as $criterion ) :
+				<?php foreach ( $readability_criteria as $criterion ) :
 					echo wp_kses_post( aiseo_render_criterion( $criterion ) );
 				endforeach; ?>
 			</div>
@@ -98,10 +105,10 @@ $post_id    = (int) ( $result['post_id'] ?? $detail_post_id ?? 0 );
 	<div class="aiseo-grid aiseo-grid--3" style="margin-top:20px">
 		<div class="aiseo-card">
 			<h4><?php esc_html_e( 'Başlıklar', 'ai-seo-editor' ); ?></h4>
-			<?php if ( ! empty( $result['headings'] ) ) : ?>
+			<?php if ( ! empty( $headings ) ) : ?>
 				<ul class="aiseo-list">
-				<?php foreach ( $result['headings'] as $h ) : ?>
-					<li><code><?php echo esc_html( strtoupper( $h['level'] ) ); ?></code> <?php echo esc_html( aiseo_truncate( $h['text'], 60 ) ); ?></li>
+				<?php foreach ( $headings as $h ) : ?>
+					<li><code><?php echo esc_html( strtoupper( $h['level'] ?? '' ) ); ?></code> <?php echo esc_html( aiseo_truncate( $h['text'] ?? '', 60 ) ); ?></li>
 				<?php endforeach; ?>
 				</ul>
 			<?php else : ?>
@@ -109,11 +116,12 @@ $post_id    = (int) ( $result['post_id'] ?? $detail_post_id ?? 0 );
 			<?php endif; ?>
 		</div>
 		<div class="aiseo-card">
-			<h4><?php esc_html_e( 'İç Linkler', 'ai-seo-editor' ); ?> (<?php echo esc_html( count( $result['internal_links'] ) ); ?>)</h4>
-			<?php if ( ! empty( $result['internal_links'] ) ) : ?>
+			<h4><?php esc_html_e( 'İç Linkler', 'ai-seo-editor' ); ?> (<?php echo esc_html( count( $internal_links ) ); ?>)</h4>
+			<?php if ( ! empty( $internal_links ) ) : ?>
 				<ul class="aiseo-list">
-				<?php foreach ( array_slice( $result['internal_links'], 0, 5 ) as $link ) : ?>
-					<li><a href="<?php echo esc_url( $link['href'] ); ?>" target="_blank"><?php echo esc_html( aiseo_truncate( $link['text'] ?: $link['href'], 50 ) ); ?></a></li>
+				<?php foreach ( array_slice( $internal_links, 0, 5 ) as $link ) : ?>
+					<?php $link_text = ! empty( $link['text'] ) ? $link['text'] : ( $link['href'] ?? '' ); ?>
+					<li><a href="<?php echo esc_url( $link['href'] ?? '' ); ?>" target="_blank"><?php echo esc_html( aiseo_truncate( $link_text, 50 ) ); ?></a></li>
 				<?php endforeach; ?>
 				</ul>
 			<?php else : ?>
@@ -121,10 +129,10 @@ $post_id    = (int) ( $result['post_id'] ?? $detail_post_id ?? 0 );
 			<?php endif; ?>
 		</div>
 		<div class="aiseo-card">
-			<h4><?php esc_html_e( 'Görseller', 'ai-seo-editor' ); ?> (<?php echo esc_html( count( $result['images'] ) ); ?>)</h4>
-			<?php if ( ! empty( $result['images'] ) ) : ?>
+			<h4><?php esc_html_e( 'Görseller', 'ai-seo-editor' ); ?> (<?php echo esc_html( count( $images ) ); ?>)</h4>
+			<?php if ( ! empty( $images ) ) : ?>
 				<ul class="aiseo-list">
-				<?php foreach ( array_slice( $result['images'], 0, 5 ) as $img ) : ?>
+				<?php foreach ( array_slice( $images, 0, 5 ) as $img ) : ?>
 					<li>
 						<?php if ( empty( $img['alt'] ) ) : ?>
 							<span class="aiseo-badge aiseo-badge--red"><?php esc_html_e( 'Alt Eksik', 'ai-seo-editor' ); ?></span>
