@@ -564,6 +564,97 @@
 	}
 
 	function initEditorPanel() {
+		return initEditorPanelDelegated();
+	}
+
+	let editorSuggestionState = null;
+	let editorFullSuggestionState = null;
+	let editorPanelEventsBound = false;
+
+	function initEditorPanelDelegated() {
+		if (editorPanelEventsBound) return;
+		editorPanelEventsBound = true;
+
+		document.addEventListener('click', async (event) => {
+			const target = event.target;
+			const button = target instanceof Element ? target.closest('button') : null;
+			if (!button) return;
+
+			const panel = button.closest('.aiseo-editor-panel');
+			if (!panel) return;
+
+			const postId = panel.dataset.postId || Config.postId;
+			const preview = document.getElementById('aiseo-editor-preview');
+
+			if (button.id === 'aiseo-editor-analyze') {
+				event.preventDefault();
+				UI.loading(button, true);
+				try {
+					const res = await API.analyzePost(postId, true);
+					const data = res.data || {};
+					const seoScore = document.getElementById('aiseo-editor-seo-score');
+					const readScore = document.getElementById('aiseo-editor-read-score');
+					if (seoScore) seoScore.textContent = data.seo_score || '—';
+					if (readScore) readScore.textContent = data.readability_score || '—';
+					UI.notice('aiseo-editor-notice', 'Analiz yenilendi.', 'success');
+				} catch (e) {
+					UI.notice('aiseo-editor-notice', e.message || i18n.error, 'error');
+				} finally {
+					UI.loading(button, false);
+				}
+				return;
+			}
+
+			if (button.classList.contains('aiseo-editor-optimize')) {
+				event.preventDefault();
+				UI.loading(button, true);
+				try {
+					const res = await API.optimize(postId, button.dataset.operation);
+					renderEditorSuggestion(preview, res.data || {});
+				} catch (e) {
+					UI.notice('aiseo-editor-notice', e.message || i18n.error, 'error');
+				} finally {
+					UI.loading(button, false);
+				}
+				return;
+			}
+
+			if (button.id === 'aiseo-editor-fix-all') {
+				event.preventDefault();
+				if (!confirm('Başlık, meta, okunabilirlik ve FAQ için tek paket öneri hazırlansın mı? Değişiklikler editöre aktarılacak, kaydı siz yapacaksınız.')) return;
+				UI.loading(button, true);
+				try {
+					const res = await API.fullOptimize(postId);
+					renderEditorFullSuggestion(preview, res.data || {});
+				} catch (e) {
+					UI.notice('aiseo-editor-notice', e.message || i18n.error, 'error');
+				} finally {
+					UI.loading(button, false);
+				}
+				return;
+			}
+
+			if (button.dataset.aiseoAction === 'apply-suggestion') {
+				event.preventDefault();
+				if (!editorSuggestionState) return;
+				applyEditorSuggestion(editorSuggestionState);
+				UI.notice('aiseo-editor-notice', 'Öneri editöre aktarıldı. Kontrol edip Güncelle ile kaydedin.', 'success');
+				return;
+			}
+
+			if (button.dataset.aiseoAction === 'apply-full') {
+				event.preventDefault();
+				if (!editorFullSuggestionState) return;
+				const data = editorFullSuggestionState;
+				if (data.title) applyEditorTitle(data.title);
+				if (data.content) applyEditorContent(data.content);
+				if (data.meta) localStorage.setItem('aiseo_pending_meta_' + (data.post_id || Config.postId), data.meta);
+				UI.notice('aiseo-editor-notice', 'Tam düzeltme editöre aktarıldı. Kontrol edip Güncelle ile kaydedin.', 'success');
+			}
+		});
+	}
+
+	function initEditorPanelLegacy() {
 		const panel = document.querySelector('.aiseo-editor-panel');
 		if (!panel) return;
 
@@ -620,14 +711,62 @@
 		}
 	}
 
+	function renderInlineDiff(before, after) {
+		const oldTokens = diffTokens(before);
+		const newTokens = diffTokens(after);
+		if (!oldTokens.length && !newTokens.length) {
+			return '<div class="aiseo-diff-empty">Gösterilecek değişiklik yok.</div>';
+		}
+
+		const table = Array.from({ length: oldTokens.length + 1 }, () => Array(newTokens.length + 1).fill(0));
+		for (let i = oldTokens.length - 1; i >= 0; i--) {
+			for (let j = newTokens.length - 1; j >= 0; j--) {
+				table[i][j] = oldTokens[i] === newTokens[j]
+					? table[i + 1][j + 1] + 1
+					: Math.max(table[i + 1][j], table[i][j + 1]);
+			}
+		}
+
+		let i = 0;
+		let j = 0;
+		let html = '';
+		while (i < oldTokens.length && j < newTokens.length) {
+			if (oldTokens[i] === newTokens[j]) {
+				html += escapeHtml(oldTokens[i]);
+				i++;
+				j++;
+			} else if (table[i + 1][j] >= table[i][j + 1]) {
+				html += '<del>' + escapeHtml(oldTokens[i]) + '</del>';
+				i++;
+			} else {
+				html += '<ins>' + escapeHtml(newTokens[j]) + '</ins>';
+				j++;
+			}
+		}
+		while (i < oldTokens.length) {
+			html += '<del>' + escapeHtml(oldTokens[i]) + '</del>';
+			i++;
+		}
+		while (j < newTokens.length) {
+			html += '<ins>' + escapeHtml(newTokens[j]) + '</ins>';
+			j++;
+		}
+
+		return '<div class="aiseo-diff-legend"><span class="is-removed">Silinen</span><span class="is-added">Eklenen</span></div><div class="aiseo-diff-code">' + html + '</div>';
+	}
+
+	function diffTokens(value) {
+		return String(value || '').split(/(\s+|<[^>]+>|[.,;:!?()[\]{}])/g).filter((token) => token !== '');
+	}
+
 	function renderEditorSuggestion(container, data) {
 		if (!container) return;
+		editorSuggestionState = data;
 		const field = data.field || 'post_content';
 		const title = editorOperationLabel(data.operation || field);
 		container.innerHTML = '<div class="aiseo-editor-suggestion">' +
 			'<h4>' + escapeHtml(title) + '</h4>' +
-			'<div class="aiseo-editor-diff"><div><strong>Mevcut</strong><pre>' + escapeHtml(data.before || '—') + '</pre></div>' +
-			'<div><strong>Öneri</strong><pre>' + escapeHtml(data.after || '—') + '</pre></div></div>' +
+			'<div class="aiseo-editor-diff-view">' + renderInlineDiff(data.before || '', data.after || '') + '</div>' +
 			'<button type="button" class="button button-primary" id="aiseo-editor-apply-suggestion">Editöre Aktar</button>' +
 			'</div>';
 
@@ -639,6 +778,7 @@
 
 	function renderEditorFullSuggestion(container, data) {
 		if (!container) return;
+		editorFullSuggestionState = data;
 		const okSteps = (data.steps || []).filter((step) => step.success);
 		const failedSteps = (data.steps || []).filter((step) => !step.success);
 		container.innerHTML = '<div class="aiseo-editor-suggestion">' +
@@ -647,6 +787,9 @@
 			'<ul class="aiseo-editor-step-list">' + (data.steps || []).map((step) =>
 				'<li class="' + (step.success ? 'is-ok' : 'is-error') + '">' + escapeHtml(editorOperationLabel(step.operation)) + '</li>'
 			).join('') + '</ul>' +
+			'<div class="aiseo-editor-full-diffs">' + (data.steps || []).filter((step) => step.success).map((step) =>
+				'<div class="aiseo-editor-full-diff"><strong>' + escapeHtml(editorOperationLabel(step.operation)) + '</strong>' + renderInlineDiff(step.before || '', step.after || '') + '</div>'
+			).join('') + '</div>' +
 			'<button type="button" class="button button-primary" id="aiseo-editor-apply-full">Tamamını Editöre Aktar</button>' +
 			'</div>';
 
