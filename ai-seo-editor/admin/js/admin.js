@@ -827,6 +827,10 @@
 				return editor.getEditedPostContent() || '';
 			}
 		}
+		const tinymceEditor = window.tinymce?.get?.('content');
+		if (tinymceEditor && !tinymceEditor.isHidden()) {
+			return tinymceEditor.getContent() || '';
+		}
 		return document.getElementById('content')?.value || '';
 	}
 
@@ -838,10 +842,18 @@
 				return;
 			}
 		}
+		const tinymceEditor = window.tinymce?.get?.('content');
+		if (tinymceEditor && !tinymceEditor.isHidden()) {
+			tinymceEditor.setContent(content);
+			tinymceEditor.save();
+			tinymceEditor.fire('change');
+			tinymceEditor.fire('keyup');
+		}
 		const textarea = document.getElementById('content');
 		if (textarea) {
 			textarea.value = content;
 			textarea.dispatchEvent(new Event('input', { bubbles: true }));
+			textarea.dispatchEvent(new Event('change', { bubbles: true }));
 		}
 	}
 
@@ -857,6 +869,7 @@
 		if (titleInput) {
 			titleInput.value = title;
 			titleInput.dispatchEvent(new Event('input', { bubbles: true }));
+			titleInput.dispatchEvent(new Event('change', { bubbles: true }));
 		}
 	}
 
