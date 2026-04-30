@@ -102,8 +102,8 @@ $total_pages = (int) ceil( $total / $per_page );
 					<button class="button button-small aiseo-btn-analyze" data-post-id="<?php echo esc_attr( $post->ID ); ?>">
 						<?php esc_html_e( 'Analiz Et', 'ai-seo-editor' ); ?>
 					</button>
-					<a href="<?php echo esc_url( admin_url( 'admin.php?page=aiseo-posts&action=detail&post_id=' . $post->ID ) ); ?>" class="button button-small button-primary">
-						<?php esc_html_e( 'Detay', 'ai-seo-editor' ); ?>
+					<a href="<?php echo esc_url( get_edit_post_link( $post->ID, 'raw' ) ); ?>" class="button button-small button-primary">
+						<?php esc_html_e( 'Editörde İyileştir', 'ai-seo-editor' ); ?>
 					</a>
 				</td>
 			</tr>

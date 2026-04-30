@@ -18,6 +18,7 @@ class AISEO_Admin {
 	public function init(): void {
 		add_action( 'admin_menu', [ $this, 'add_admin_menu' ] );
 		add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_assets' ] );
+		add_action( 'add_meta_boxes', [ $this, 'add_editor_metabox' ] );
 		add_filter( 'manage_post_posts_columns', [ $this, 'add_seo_score_column' ] );
 		add_action( 'manage_post_posts_custom_column', [ $this, 'render_seo_score_column' ], 10, 2 );
 		add_filter( 'manage_page_posts_columns', [ $this, 'add_seo_score_column' ] );
@@ -106,6 +107,58 @@ class AISEO_Admin {
 			'aiseo-logs',
 			[ $this, 'page_logs' ]
 		);
+	}
+
+	public function add_editor_metabox(): void {
+		foreach ( [ 'post', 'page' ] as $post_type ) {
+			add_meta_box(
+				'aiseo-editor-panel',
+				__( 'AI SEO Editor', 'ai-seo-editor' ),
+				[ $this, 'render_editor_metabox' ],
+				$post_type,
+				'side',
+				'high'
+			);
+		}
+	}
+
+	public function render_editor_metabox( WP_Post $post ): void {
+		$seo_score  = (int) get_post_meta( $post->ID, '_aiseo_seo_score', true );
+		$read_score = (int) get_post_meta( $post->ID, '_aiseo_readability_score', true );
+		$last       = get_post_meta( $post->ID, '_aiseo_last_analysis', true );
+		?>
+		<div class="aiseo-editor-panel" data-post-id="<?php echo esc_attr( $post->ID ); ?>">
+			<div class="aiseo-editor-scores">
+				<div>
+					<span><?php esc_html_e( 'SEO', 'ai-seo-editor' ); ?></span>
+					<strong id="aiseo-editor-seo-score"><?php echo esc_html( $seo_score > 0 ? $seo_score : '—' ); ?></strong>
+				</div>
+				<div>
+					<span><?php esc_html_e( 'Okunabilirlik', 'ai-seo-editor' ); ?></span>
+					<strong id="aiseo-editor-read-score"><?php echo esc_html( $read_score > 0 ? $read_score : '—' ); ?></strong>
+				</div>
+			</div>
+			<?php if ( $last ) : ?>
+				<p class="aiseo-editor-last"><?php echo esc_html( sprintf( __( 'Son analiz: %s önce', 'ai-seo-editor' ), human_time_diff( strtotime( $last ) ) ) ); ?></p>
+			<?php endif; ?>
+
+			<div class="aiseo-editor-actions">
+				<button type="button" class="button button-secondary" id="aiseo-editor-analyze"><?php esc_html_e( 'Analiz Et', 'ai-seo-editor' ); ?></button>
+				<button type="button" class="button button-primary" id="aiseo-editor-fix-all"><?php esc_html_e( 'Tamamını Düzelt', 'ai-seo-editor' ); ?></button>
+			</div>
+
+			<div class="aiseo-editor-quick">
+				<button type="button" class="button aiseo-editor-optimize" data-operation="optimize_title"><?php esc_html_e( 'Başlık', 'ai-seo-editor' ); ?></button>
+				<button type="button" class="button aiseo-editor-optimize" data-operation="optimize_meta"><?php esc_html_e( 'Meta', 'ai-seo-editor' ); ?></button>
+				<button type="button" class="button aiseo-editor-optimize" data-operation="improve_intro"><?php esc_html_e( 'Giriş', 'ai-seo-editor' ); ?></button>
+				<button type="button" class="button aiseo-editor-optimize" data-operation="improve_readability"><?php esc_html_e( 'Okunabilirlik', 'ai-seo-editor' ); ?></button>
+				<button type="button" class="button aiseo-editor-optimize" data-operation="add_faq"><?php esc_html_e( 'FAQ', 'ai-seo-editor' ); ?></button>
+			</div>
+
+			<div id="aiseo-editor-notice"></div>
+			<div id="aiseo-editor-preview"></div>
+		</div>
+		<?php
 	}
 
 	public function enqueue_assets( string $hook ): void {

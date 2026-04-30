@@ -65,7 +65,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 			<tr data-post-id="<?php echo esc_attr( $post->ID ); ?>" data-score-color="<?php echo esc_attr( $color ); ?>" data-title="<?php echo esc_attr( strtolower( $post->post_title ) ); ?>">
 				<td><input type="checkbox" class="aiseo-post-select" value="<?php echo esc_attr( $post->ID ); ?>"></td>
 				<td>
-					<a href="<?php echo esc_url( admin_url( 'admin.php?page=aiseo-posts&action=detail&post_id=' . $post->ID ) ); ?>">
+					<a href="<?php echo esc_url( get_edit_post_link( $post->ID, 'raw' ) ); ?>">
 						<?php echo esc_html( $post->post_title ); ?>
 					</a>
 				</td>
@@ -88,7 +88,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 					<?php echo $last_anal ? esc_html( human_time_diff( strtotime( $last_anal ) ) . ' önce' ) : '—'; ?>
 				</td>
 				<td>
-					<a href="<?php echo esc_url( admin_url( 'admin.php?page=aiseo-posts&action=detail&post_id=' . $post->ID ) ); ?>" class="button button-small"><?php esc_html_e( 'Detay', 'ai-seo-editor' ); ?></a>
+					<a href="<?php echo esc_url( get_edit_post_link( $post->ID, 'raw' ) ); ?>" class="button button-small"><?php esc_html_e( 'Editörde İyileştir', 'ai-seo-editor' ); ?></a>
 				</td>
 			</tr>
 		<?php endforeach; ?>

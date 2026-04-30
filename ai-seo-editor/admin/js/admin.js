@@ -33,6 +33,7 @@
 		analyzePost:      (pid, force) => API.request('/analyze/' + pid, 'POST', { force: !!force }),
 		getAnalysis:      (pid)        => API.request('/analyze/' + pid),
 		optimize:         (pid, op)    => API.request('/optimize', 'POST', { post_id: pid, operation: op }),
+		fullOptimize:     (pid)        => API.request('/optimize/full', 'POST', { post_id: pid }),
 		applyOptimize:    (data)       => API.request('/optimize/apply', 'POST', data),
 		bulkAnalyze:      (ids)        => API.request('/bulk-analyze', 'POST', { post_ids: ids }),
 		generateArticle:  (params)     => API.request('/generate', 'POST', params),
@@ -562,6 +563,173 @@
 		setTimeout(applyContent, 800);
 	}
 
+	function initEditorPanel() {
+		const panel = document.querySelector('.aiseo-editor-panel');
+		if (!panel) return;
+
+		const postId = panel.dataset.postId || Config.postId;
+		const analyzeBtn = document.getElementById('aiseo-editor-analyze');
+		const fixAllBtn = document.getElementById('aiseo-editor-fix-all');
+		const preview = document.getElementById('aiseo-editor-preview');
+
+		if (analyzeBtn) {
+			analyzeBtn.addEventListener('click', async () => {
+				UI.loading(analyzeBtn, true);
+				try {
+					const res = await API.analyzePost(postId, true);
+					const data = res.data || {};
+					document.getElementById('aiseo-editor-seo-score').textContent = data.seo_score || '—';
+					document.getElementById('aiseo-editor-read-score').textContent = data.readability_score || '—';
+					UI.notice('aiseo-editor-notice', 'Analiz yenilendi.', 'success');
+				} catch (e) {
+					UI.notice('aiseo-editor-notice', e.message || i18n.error, 'error');
+				} finally {
+					UI.loading(analyzeBtn, false);
+				}
+			});
+		}
+
+		document.querySelectorAll('.aiseo-editor-optimize').forEach((btn) => {
+			btn.addEventListener('click', async () => {
+				const operation = btn.dataset.operation;
+				UI.loading(btn, true);
+				try {
+					const res = await API.optimize(postId, operation);
+					renderEditorSuggestion(preview, res.data || {}, false);
+				} catch (e) {
+					UI.notice('aiseo-editor-notice', e.message || i18n.error, 'error');
+				} finally {
+					UI.loading(btn, false);
+				}
+			});
+		});
+
+		if (fixAllBtn) {
+			fixAllBtn.addEventListener('click', async () => {
+				if (!confirm('Başlık, meta, okunabilirlik ve FAQ için tek paket öneri hazırlansın mı? Değişiklikler editöre aktarılacak, kaydı siz yapacaksınız.')) return;
+				UI.loading(fixAllBtn, true);
+				try {
+					const res = await API.fullOptimize(postId);
+					renderEditorFullSuggestion(preview, res.data || {});
+				} catch (e) {
+					UI.notice('aiseo-editor-notice', e.message || i18n.error, 'error');
+				} finally {
+					UI.loading(fixAllBtn, false);
+				}
+			});
+		}
+	}
+
+	function renderEditorSuggestion(container, data) {
+		if (!container) return;
+		const field = data.field || 'post_content';
+		const title = editorOperationLabel(data.operation || field);
+		container.innerHTML = '<div class="aiseo-editor-suggestion">' +
+			'<h4>' + escapeHtml(title) + '</h4>' +
+			'<div class="aiseo-editor-diff"><div><strong>Mevcut</strong><pre>' + escapeHtml(data.before || '—') + '</pre></div>' +
+			'<div><strong>Öneri</strong><pre>' + escapeHtml(data.after || '—') + '</pre></div></div>' +
+			'<button type="button" class="button button-primary" id="aiseo-editor-apply-suggestion">Editöre Aktar</button>' +
+			'</div>';
+
+		document.getElementById('aiseo-editor-apply-suggestion')?.addEventListener('click', () => {
+			applyEditorSuggestion(data);
+			UI.notice('aiseo-editor-notice', 'Öneri editöre aktarıldı. Kontrol edip Güncelle ile kaydedin.', 'success');
+		});
+	}
+
+	function renderEditorFullSuggestion(container, data) {
+		if (!container) return;
+		const okSteps = (data.steps || []).filter((step) => step.success);
+		const failedSteps = (data.steps || []).filter((step) => !step.success);
+		container.innerHTML = '<div class="aiseo-editor-suggestion">' +
+			'<h4>Tam Düzeltme Hazır</h4>' +
+			'<p class="aiseo-editor-help">' + okSteps.length + ' öneri hazırlandı' + (failedSteps.length ? ', ' + failedSteps.length + ' öneri üretilemedi' : '') + '.</p>' +
+			'<ul class="aiseo-editor-step-list">' + (data.steps || []).map((step) =>
+				'<li class="' + (step.success ? 'is-ok' : 'is-error') + '">' + escapeHtml(editorOperationLabel(step.operation)) + '</li>'
+			).join('') + '</ul>' +
+			'<button type="button" class="button button-primary" id="aiseo-editor-apply-full">Tamamını Editöre Aktar</button>' +
+			'</div>';
+
+		document.getElementById('aiseo-editor-apply-full')?.addEventListener('click', () => {
+			if (data.title) applyEditorTitle(data.title);
+			if (data.content) applyEditorContent(data.content);
+			if (data.meta) localStorage.setItem('aiseo_pending_meta_' + (data.post_id || Config.postId), data.meta);
+			UI.notice('aiseo-editor-notice', 'Tam düzeltme editöre aktarıldı. Kontrol edip Güncelle ile kaydedin.', 'success');
+		});
+	}
+
+	function applyEditorSuggestion(data) {
+		const field = data.field || 'post_content';
+		const after = data.after || '';
+		if (!after) return;
+
+		if (field === 'post_title') {
+			applyEditorTitle(after);
+		} else if (field === 'append_content') {
+			applyEditorContent(getEditorContent() + '\n\n' + after);
+		} else if (field === 'intro') {
+			applyEditorContent(replaceIntro(getEditorContent(), after));
+		} else if (field === 'post_content') {
+			applyEditorContent(after);
+		} else if (field === 'meta') {
+			localStorage.setItem('aiseo_pending_meta_' + (data.post_id || Config.postId), after);
+			window.alert('Meta önerisi hazır. Yoast/meta alanınıza yapıştırmanız için saklandı:\n\n' + after);
+		}
+	}
+
+	function getEditorContent() {
+		if (window.wp?.data?.select) {
+			return window.wp.data.select('core/editor').getEditedPostContent() || '';
+		}
+		return document.getElementById('content')?.value || '';
+	}
+
+	function applyEditorContent(content) {
+		if (window.wp?.data?.dispatch) {
+			window.wp.data.dispatch('core/editor').editPost({ content });
+			return;
+		}
+		const textarea = document.getElementById('content');
+		if (textarea) {
+			textarea.value = content;
+			textarea.dispatchEvent(new Event('input', { bubbles: true }));
+		}
+	}
+
+	function applyEditorTitle(title) {
+		if (window.wp?.data?.dispatch) {
+			window.wp.data.dispatch('core/editor').editPost({ title });
+			return;
+		}
+		const titleInput = document.getElementById('title');
+		if (titleInput) {
+			titleInput.value = title;
+			titleInput.dispatchEvent(new Event('input', { bubbles: true }));
+		}
+	}
+
+	function replaceIntro(content, intro) {
+		if (/<p[^>]*>.*?<\/p>/is.test(content)) {
+			return content.replace(/<p[^>]*>.*?<\/p>/is, '<p>' + escapeHtml(intro) + '</p>');
+		}
+		return '<p>' + escapeHtml(intro) + '</p>\n\n' + content;
+	}
+
+	function editorOperationLabel(operation) {
+		return {
+			optimize_title: 'Başlık İyileştirme',
+			optimize_meta: 'Meta Açıklama',
+			improve_intro: 'Giriş Paragrafı',
+			improve_readability: 'Okunabilirlik',
+			improve_keyword_density: 'Keyword Dağılımı',
+			add_faq: 'FAQ Ekleme',
+			improve_conclusion: 'Sonuç Bölümü',
+			post_content: 'İçerik',
+			append_content: 'İçeriğe Ekleme',
+			meta: 'Meta Açıklama',
+		}[operation] || 'AI Önerisi';
+	}
+
 	/* ------------------------------------------------------------------ */
 	/* Settings Page                                                        */
 	/* ------------------------------------------------------------------ */
@@ -717,6 +885,7 @@
 		// Also init optimize buttons on any page (post detail is embedded in posts page)
 		initPostDetailOptimize();
 		initPendingLinkContent();
+		initEditorPanel();
 	}
 
 	document.addEventListener('DOMContentLoaded', init);

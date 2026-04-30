@@ -660,6 +660,129 @@
 .aiseo-diff-before { background: var(--aiseo-red-soft); }
 .aiseo-diff-after { background: var(--aiseo-green-soft); }
 
+.aiseo-editor-panel {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.aiseo-editor-scores {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 8px;
+}
+
+.aiseo-editor-scores > div {
+	background: var(--aiseo-surface-2, #f5f7ff);
+	border: 1px solid var(--aiseo-border, #e2e6f0);
+	border-radius: 8px;
+	padding: 10px;
+}
+
+.aiseo-editor-scores span {
+	display: block;
+	color: var(--aiseo-text-muted, #6b7a9d);
+	font-size: 11px;
+	font-weight: 700;
+	margin-bottom: 4px;
+}
+
+.aiseo-editor-scores strong {
+	color: var(--aiseo-text, #1e2247);
+	font-size: 22px;
+	line-height: 1;
+}
+
+.aiseo-editor-last,
+.aiseo-editor-help {
+	color: var(--aiseo-text-muted, #6b7a9d);
+	font-size: 12px;
+	margin: 0;
+}
+
+.aiseo-editor-actions,
+.aiseo-editor-quick {
+	display: grid;
+	gap: 8px;
+}
+
+.aiseo-editor-actions {
+	grid-template-columns: 1fr 1fr;
+}
+
+.aiseo-editor-quick {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.aiseo-editor-panel .button {
+	min-height: 34px;
+	white-space: normal;
+}
+
+.aiseo-editor-suggestion {
+	border: 1px solid var(--aiseo-border, #e2e6f0);
+	border-radius: 10px;
+	background: var(--aiseo-surface, #fff);
+	padding: 12px;
+}
+
+.aiseo-editor-suggestion h4 {
+	margin: 0 0 10px;
+	color: var(--aiseo-text, #1e2247);
+	font-size: 13px;
+}
+
+.aiseo-editor-diff {
+	display: grid;
+	gap: 10px;
+	margin-bottom: 10px;
+}
+
+.aiseo-editor-diff strong {
+	display: block;
+	margin-bottom: 4px;
+	font-size: 11px;
+	color: var(--aiseo-text-muted, #6b7a9d);
+}
+
+.aiseo-editor-diff pre {
+	max-height: 150px;
+	overflow: auto;
+	margin: 0;
+	padding: 9px;
+	border-radius: 8px;
+	background: var(--aiseo-surface-2, #f5f7ff);
+	color: var(--aiseo-text, #1e2247);
+	white-space: pre-wrap;
+	font-size: 12px;
+	line-height: 1.45;
+}
+
+.aiseo-editor-step-list {
+	margin: 0 0 12px 0;
+	padding: 0;
+}
+
+.aiseo-editor-step-list li {
+	list-style: none;
+	margin: 0 0 6px;
+	padding: 7px 9px;
+	border-radius: 8px;
+	border: 1px solid var(--aiseo-border, #e2e6f0);
+	font-size: 12px;
+	font-weight: 700;
+}
+
+.aiseo-editor-step-list .is-ok {
+	background: var(--aiseo-green-soft, rgba(16,185,129,.14));
+	color: var(--aiseo-green, #10b981);
+}
+
+.aiseo-editor-step-list .is-error {
+	background: var(--aiseo-red-soft, rgba(248,113,113,.16));
+	color: var(--aiseo-red, #f87171);
+}
+
 @media (prefers-color-scheme: dark) {
 	.aiseo-wrap {
 		--aiseo-bg: #0f1117;

@@ -41,6 +41,12 @@ class AISEO_Rest_Controller {
 			'permission_callback' => [ $this, 'check_permissions' ],
 		] );
 
+		register_rest_route( self::NAMESPACE, '/optimize/full', [
+			'methods'             => WP_REST_Server::CREATABLE,
+			'callback'            => [ $this, 'run_full_optimize' ],
+			'permission_callback' => [ $this, 'check_permissions' ],
+		] );
+
 		register_rest_route( self::NAMESPACE, '/optimize/apply', [
 			'methods'             => WP_REST_Server::CREATABLE,
 			'callback'            => [ $this, 'apply_optimization' ],
@@ -182,6 +188,67 @@ class AISEO_Rest_Controller {
 		}
 
 		return $this->ok( $result, __( 'AI önerisi hazır.', 'ai-seo-editor' ) );
+	}
+
+	public function run_full_optimize( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+		$post_id = absint( $request->get_param( 'post_id' ) );
+		if ( ! $this->post_exists( $post_id ) ) {
+			return $this->not_found();
+		}
+
+		$this->check_token_budget();
+
+		$post      = get_post( $post_id );
+		$content   = $post instanceof WP_Post ? $post->post_content : '';
+		$title     = $post instanceof WP_Post ? $post->post_title : '';
+		$meta      = '';
+		$client    = new AISEO_OpenAI_Client( $this->settings );
+		$optimizer = new AISEO_Optimizer( $client, $this->logger );
+		$steps     = [];
+
+		foreach ( [ 'optimize_title', 'optimize_meta', 'improve_readability', 'add_faq' ] as $operation ) {
+			$result = $optimizer->run( $post_id, $operation );
+			if ( empty( $result['success'] ) ) {
+				$steps[] = [
+					'operation' => $operation,
+					'success'   => false,
+					'error'     => $result['error'] ?? __( 'Öneri üretilemedi.', 'ai-seo-editor' ),
+				];
+				continue;
+			}
+
+			$field = $result['field'] ?? '';
+			$after = (string) ( $result['after'] ?? '' );
+
+			if ( 'post_title' === $field && $after !== '' ) {
+				$title = sanitize_text_field( $after );
+			} elseif ( 'meta' === $field && $after !== '' ) {
+				$meta = sanitize_textarea_field( $after );
+			} elseif ( 'post_content' === $field && $after !== '' ) {
+				$content = wp_kses_post( $after );
+			} elseif ( 'append_content' === $field && $after !== '' ) {
+				$content .= "\n\n" . wp_kses_post( $after );
+			}
+
+			$steps[] = [
+				'operation' => $operation,
+				'success'   => true,
+				'field'     => $field,
+				'before'    => $result['before'] ?? '',
+				'after'     => $after,
+			];
+		}
+
+		return $this->ok(
+			[
+				'post_id' => $post_id,
+				'title'   => $title,
+				'content' => $content,
+				'meta'    => $meta,
+				'steps'   => $steps,
+			],
+			__( 'Tam düzeltme önerisi hazır.', 'ai-seo-editor' )
+		);
 	}
 
 	public function apply_optimization( WP_REST_Request $request ): WP_REST_Response|WP_Error {
