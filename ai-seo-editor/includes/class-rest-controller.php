@@ -59,6 +59,12 @@ class AISEO_Rest_Controller {
 			'permission_callback' => [ $this, 'check_permissions' ],
 		] );
 
+		register_rest_route( self::NAMESPACE, '/tags/optimize/(?P<post_id>\d+)', [
+			'methods'             => WP_REST_Server::CREATABLE,
+			'callback'            => [ $this, 'optimize_tags' ],
+			'permission_callback' => [ $this, 'check_permissions' ],
+		] );
+
 		register_rest_route( self::NAMESPACE, '/bulk-analyze', [
 			'methods'             => WP_REST_Server::CREATABLE,
 			'callback'            => [ $this, 'bulk_analyze' ],
@@ -609,6 +615,54 @@ class AISEO_Rest_Controller {
 		return new WP_Error( 'aiseo_not_found', __( 'Yazı bulunamadı.', 'ai-seo-editor' ), [ 'status' => 404 ] );
 	}
 
+	public function optimize_tags( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+		$post_id = absint( $request->get_param( 'post_id' ) );
+		if ( ! $this->post_exists( $post_id ) ) {
+			return $this->not_found();
+		}
+
+		$this->check_token_budget();
+
+		$post    = get_post( $post_id );
+		$yoast   = new AISEO_Yoast_Integration();
+		$keyword = $yoast->get_focus_keyword( $post_id );
+		$content = $request->has_param( 'content' ) ? wp_kses_post( $request->get_param( 'content' ) ) : ( $post instanceof WP_Post ? $post->post_content : '' );
+		$current = (array) ( $request->get_param( 'current_tags' ) ?? wp_get_post_tags( $post_id, [ 'fields' => 'names' ] ) );
+		$current = array_map( 'sanitize_text_field', $current );
+
+		if ( empty( $keyword ) && $post instanceof WP_Post ) {
+			$keyword = $post->post_title;
+		}
+
+		$client = new AISEO_OpenAI_Client( $this->settings );
+		$result = $client->optimize_tags( $post_id, $keyword, $content, $current );
+		$tags   = $this->clean_tag_list( is_array( $result['tags'] ?? null ) ? $result['tags'] : [], 8 );
+
+		if ( empty( $tags ) ) {
+			return new WP_Error( 'aiseo_tags_empty', __( 'Etiket önerisi üretilemedi.', 'ai-seo-editor' ), [ 'status' => 500 ] );
+		}
+
+		wp_set_post_tags( $post_id, $tags, false );
+
+		$this->logger->log_ai_operation(
+			$post_id,
+			'optimize_tags',
+			(string) $this->settings->get( 'openai_model' ),
+			0,
+			(int) ( $result['tokens_used'] ?? 0 ),
+			'success'
+		);
+
+		return $this->ok(
+			[
+				'post_id' => $post_id,
+				'before'  => $current,
+				'tags'    => $tags,
+			],
+			__( 'Etiketler güncellendi.', 'ai-seo-editor' )
+		);
+	}
+
 	private function filter_new_tags( int $post_id, array $tags, int $limit = 3 ): array {
 		$existing = wp_get_post_tags( $post_id, [ 'fields' => 'names' ] );
 		$seen     = [];
@@ -630,6 +684,30 @@ class AISEO_Rest_Controller {
 
 			$seen[ $key ] = true;
 			$clean[]      = $tag;
+			if ( count( $clean ) >= $limit ) {
+				break;
+			}
+		}
+
+		return $clean;
+	}
+
+	private function clean_tag_list( array $tags, int $limit = 8 ): array {
+		$seen  = [];
+		$clean = [];
+
+		foreach ( $tags as $tag ) {
+			$tag = trim( preg_replace( '/\s+/u', ' ', wp_strip_all_tags( (string) $tag ) ) );
+			$tag = trim( str_replace( [ '#', ',' ], ' ', $tag ) );
+			$key = mb_strtolower( $tag );
+
+			if ( $tag === '' || mb_strlen( $tag ) < 4 || isset( $seen[ $key ] ) ) {
+				continue;
+			}
+
+			$seen[ $key ] = true;
+			$clean[]      = $tag;
+
 			if ( count( $clean ) >= $limit ) {
 				break;
 			}

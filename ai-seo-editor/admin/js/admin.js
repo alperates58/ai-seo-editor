@@ -46,6 +46,7 @@
 			if (typeof content === 'string') body.content = content;
 			return API.request('/links/apply', 'POST', body);
 		},
+		optimizeTags:     (pid, data)  => API.request('/tags/optimize/' + pid, 'POST', data || {}),
 		getSettings:      ()           => API.request('/settings'),
 		saveSettings:     (data)       => API.request('/settings', 'POST', data),
 		testKey:          (key)        => API.request('/settings/test-key', 'POST', { api_key: key }),
@@ -675,6 +676,32 @@
 				return;
 			}
 
+			if (button.id === 'aiseo-editor-fix-tags' || button.dataset.aiseoAction === 'fix-tags') {
+				event.preventDefault();
+				if (!confirm('Etiketler temiz bir SEO listesiyle değiştirilsin mi? Mevcut gereksiz/tekrar eden etiketler kaldırılabilir.')) return;
+				UI.loading(button, true);
+				UI.notice('aiseo-editor-notice', 'Etiketler analiz ediliyor...', 'info');
+				try {
+					const res = await API.optimizeTags(postId, {
+						content: getEditorContent(),
+						current_tags: getCurrentEditorTags(),
+					});
+					const tags = res.data?.tags || [];
+					if (!tags.length) {
+						UI.notice('aiseo-editor-notice', 'Etiket önerisi üretilemedi.', 'warning');
+						return;
+					}
+					replaceEditorTags(tags);
+					renderEditorTagsResult(preview, tags);
+					UI.notice('aiseo-editor-notice', 'Etiketler güncellendi.', 'success');
+				} catch (e) {
+					UI.notice('aiseo-editor-notice', e.message || i18n.error, 'error');
+				} finally {
+					UI.loading(button, false);
+				}
+				return;
+			}
+
 			if (button.id === 'aiseo-editor-regenerate') {
 				event.preventDefault();
 				if (!confirm('Mevcut yazı baştan oluşturulsun mu? Öneri editöre aktarılacak, kaydı siz yapacaksınız.')) return;
@@ -732,6 +759,19 @@
 		container.innerHTML = '<div class="aiseo-editor-suggestion">' +
 			'<h4>İç Linkler Eklendi</h4>' +
 			'<p class="aiseo-editor-help">En uygun ilk ' + String(count) + ' iç link editöre aktarıldı.</p>' +
+			'<ul class="aiseo-editor-step-list">' + items + '</ul>' +
+			'</div>';
+	}
+
+	function renderEditorTagsResult(container, tags) {
+		if (!container) return;
+		const items = cleanTagListLimit(tags, 8).map((tag) =>
+			'<li class="is-ok">' + escapeHtml(tag) + '</li>'
+		).join('');
+
+		container.innerHTML = '<div class="aiseo-editor-suggestion">' +
+			'<h4>Etiketler Güncellendi</h4>' +
+			'<p class="aiseo-editor-help">Mevcut liste temiz SEO etiketleriyle değiştirildi.</p>' +
 			'<ul class="aiseo-editor-step-list">' + items + '</ul>' +
 			'</div>';
 	}
@@ -998,6 +1038,34 @@
 		}
 	}
 
+	function replaceEditorTags(tags) {
+		const cleanTags = cleanTagListLimit(tags, 8);
+		if (!cleanTags.length) return;
+
+		const tagString = cleanTags.join(', ');
+		const tagInput = document.getElementById('new-tag-post_tag');
+		const tagsBox = document.getElementById('tagsdiv-post_tag');
+		const checklist = tagsBox ? tagsBox.querySelector('.tagchecklist') : null;
+		const taxInput = document.getElementById('tax-input-post_tag') || document.querySelector('[name="tax_input[post_tag]"]');
+
+		if (taxInput) {
+			taxInput.value = tagString;
+			taxInput.dispatchEvent(new Event('change', { bubbles: true }));
+		}
+
+		if (checklist) {
+			checklist.innerHTML = cleanTags.map((tag) =>
+				'<span><button type="button" class="ntdelbutton"><span class="remove-tag-icon" aria-hidden="true"></span><span class="screen-reader-text">Etiketi kaldır: ' + escapeHtml(tag) + '</span></button>&nbsp;' + escapeHtml(tag) + '</span>'
+			).join('');
+		}
+
+		if (tagInput) {
+			tagInput.value = '';
+			tagInput.dispatchEvent(new Event('input', { bubbles: true }));
+			tagInput.dispatchEvent(new Event('change', { bubbles: true }));
+		}
+	}
+
 	function replaceIntro(content, intro) {
 		const cleanIntro = stripParagraphWrapper(intro);
 		if (/<p[^>]*>.*?<\/p>/is.test(content)) {
@@ -1053,6 +1121,10 @@
 	}
 
 	function cleanTagList(tags) {
+		return cleanTagListLimit(tags, 3);
+	}
+
+	function cleanTagListLimit(tags, limit) {
 		const clean = [];
 		const seen = new Set();
 		(Array.isArray(tags) ? tags : []).forEach((tag) => {
@@ -1062,14 +1134,17 @@
 			seen.add(key);
 			clean.push(value);
 		});
-		return clean.slice(0, 3);
+		return clean.slice(0, limit || 3);
 	}
 
 	function getCurrentEditorTags() {
 		const tags = [];
 		document.querySelectorAll('#tagsdiv-post_tag .tagchecklist .ntdelbutton, #tagsdiv-post_tag .tagchecklist button').forEach((button) => {
-			const text = button.parentElement?.textContent || '';
-			const tag = text.replace(/[×x]/g, ' ').replace(/\s+/g, ' ').trim();
+			const holder = button.parentElement?.cloneNode(true);
+			if (holder && holder.querySelectorAll) {
+				holder.querySelectorAll('button, .ntdelbutton, .screen-reader-text').forEach((node) => node.remove());
+			}
+			const tag = (holder?.textContent || '').replace(/\s+/g, ' ').trim();
 			if (tag) tags.push(tag);
 		});
 

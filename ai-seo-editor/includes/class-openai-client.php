@@ -374,6 +374,38 @@ class AISEO_OpenAI_Client {
 		] );
 	}
 
+	public function optimize_tags( int $post_id, string $keyword = '', string $content_override = '', array $current_tags = [] ): array {
+		$post = get_post( $post_id );
+		if ( ! $post instanceof WP_Post ) {
+			return [];
+		}
+
+		$content = $content_override ?: ( $post->post_content ?? '' );
+		$title   = get_the_title( $post_id );
+		$current_tags = array_filter( array_map( 'sanitize_text_field', $current_tags ) );
+
+		$messages = [
+			[
+				'role'    => 'system',
+				'content' => 'Sen bir Turkce SEO etiket editorusun. Verilen WordPress yazisi icin temiz, odakli ve tekrar etmeyen etiket listesi uret. JSON dondur: {"tags":["..."]}. Kurallar: 5-8 etiket olsun; mevcut etiketleri otomatik koruma, yalnizca iyi olanlari tut; cok genel, tek kelimelik veya birbirini tekrar eden etiketleri ele; 2-4 kelimelik arama niyetli etiketleri tercih et; odak kelimeyi sadece dogalsa kullan; keyword stuffing yapma; hashtag, virgül ve aciklama ekleme.',
+			],
+			[
+				'role'    => 'user',
+				'content' => "Odak kelime: {$keyword}\nBaslik: {$title}\nMevcut etiketler: " . implode( ', ', $current_tags ) . "\nIcerik:\n" . $this->limit_content_for_prompt( aiseo_strip_html( $content ), 5000 ),
+			],
+		];
+
+		$response = $this->chat_completion( $messages, 900, 0.45, true );
+		$parsed   = $this->parse_json_response( $response['content'] ?? '' );
+		$tags     = isset( $parsed['tags'] ) && is_array( $parsed['tags'] ) ? $this->clean_tags( $parsed['tags'] ) : [];
+
+		return [
+			'tags'         => array_slice( $tags, 0, 8 ),
+			'tokens_used'  => $response['total_tokens'] ?? 0,
+			'raw_response' => $response['content'] ?? '',
+		];
+	}
+
 	public function generate_full_article( array $params ): array {
 		$keyword     = sanitize_text_field( $params['keyword'] ?? '' );
 		$title       = sanitize_text_field( $params['title'] ?? '' );
