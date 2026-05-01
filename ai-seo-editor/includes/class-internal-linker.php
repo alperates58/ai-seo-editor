@@ -21,6 +21,8 @@ class AISEO_Internal_Linker {
 			return $cached;
 		}
 
+		$this->clear_pending_suggestions( $post_id );
+
 		$posts_index = $this->build_posts_index( $post_id );
 		if ( empty( $posts_index ) ) {
 			return [];
@@ -74,6 +76,7 @@ class AISEO_Internal_Linker {
 
 	public function get_cached( int $post_id ): array {
 		global $wpdb;
+		$source_categories = wp_get_post_categories( $post_id );
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
 				"SELECT * FROM {$wpdb->prefix}aiseo_internal_link_suggestions WHERE source_post_id = %d AND status = 'pending' ORDER BY similarity_score DESC",
@@ -87,12 +90,19 @@ class AISEO_Internal_Linker {
 
 		foreach ( $rows as &$row ) {
 			$target_post = get_post( (int) $row['target_post_id'] );
+			if ( ! empty( $source_categories ) ) {
+				$target_categories = $target_post instanceof WP_Post ? wp_get_post_categories( $target_post->ID ) : [];
+				if ( empty( array_intersect( $source_categories, $target_categories ) ) ) {
+					$row = null;
+					continue;
+				}
+			}
 			$row['target_title'] = $target_post instanceof WP_Post ? $target_post->post_title : '';
 			$row['target_url']   = $target_post instanceof WP_Post ? get_permalink( $target_post ) : '';
 		}
 		unset( $row );
 
-		return $rows;
+		return array_values( array_filter( $rows ) );
 	}
 
 	public function apply_suggestions( int $post_id, array $suggestion_ids, ?string $source_content = null ): string {
@@ -223,12 +233,7 @@ class AISEO_Internal_Linker {
 	private function save_suggestions( int $post_id, array $suggestions ): void {
 		global $wpdb;
 
-		$wpdb->query(
-			$wpdb->prepare(
-				"DELETE FROM {$wpdb->prefix}aiseo_internal_link_suggestions WHERE source_post_id = %d AND status = 'pending'",
-				$post_id
-			)
-		);
+		$this->clear_pending_suggestions( $post_id );
 
 		foreach ( $suggestions as $s ) {
 			$wpdb->insert(
@@ -247,13 +252,31 @@ class AISEO_Internal_Linker {
 		}
 	}
 
+	private function clear_pending_suggestions( int $post_id ): void {
+		global $wpdb;
+
+		$wpdb->query(
+			$wpdb->prepare(
+				"DELETE FROM {$wpdb->prefix}aiseo_internal_link_suggestions WHERE source_post_id = %d AND status = 'pending'",
+				$post_id
+			)
+		);
+	}
+
 	private function build_posts_index( int $exclude_post_id ): array {
-		$posts = get_posts( [
+		$source_categories = wp_get_post_categories( $exclude_post_id );
+		$query = [
 			'post_type'      => 'post',
 			'post_status'    => 'publish',
 			'posts_per_page' => 100,
 			'exclude'        => [ $exclude_post_id ],
-		] );
+		];
+
+		if ( ! empty( $source_categories ) ) {
+			$query['category__in'] = $source_categories;
+		}
+
+		$posts = get_posts( $query );
 
 		$index = [];
 		foreach ( $posts as $post ) {
