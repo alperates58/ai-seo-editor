@@ -503,6 +503,7 @@ class AISEO_Rest_Controller {
 	public function apply_links( WP_REST_Request $request ): WP_REST_Response|WP_Error {
 		$post_id        = absint( $request->get_param( 'post_id' ) );
 		$suggestion_ids = array_map( 'absint', (array) ( $request->get_param( 'suggestion_ids' ) ?? [] ) );
+		$content        = $request->has_param( 'content' ) ? wp_kses_post( $request->get_param( 'content' ) ) : null;
 
 		if ( ! $this->post_exists( $post_id ) ) {
 			return $this->not_found();
@@ -513,7 +514,7 @@ class AISEO_Rest_Controller {
 
 		$client  = new AISEO_OpenAI_Client( $this->settings );
 		$linker  = new AISEO_Internal_Linker( $client, $this->logger );
-		$new_content = $linker->apply_suggestions( $post_id, $suggestion_ids );
+		$new_content = $linker->apply_suggestions( $post_id, $suggestion_ids, $content );
 
 		if ( empty( $new_content ) ) {
 			return new WP_Error( 'aiseo_apply_error', __( 'İç linkler hazırlanamadı.', 'ai-seo-editor' ), [ 'status' => 500 ] );

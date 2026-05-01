@@ -41,7 +41,11 @@
 		createDraft:      (data)       => API.request('/generate/create-draft', 'POST', data),
 		getLinks:         (pid)        => API.request('/links/' + pid),
 		computeLinks:     (pid)        => API.request('/links/' + pid + '/compute', 'POST'),
-		applyLinks:       (pid, ids)   => API.request('/links/apply', 'POST', { post_id: pid, suggestion_ids: ids }),
+		applyLinks:       (pid, ids, content) => {
+			const body = { post_id: pid, suggestion_ids: ids };
+			if (typeof content === 'string') body.content = content;
+			return API.request('/links/apply', 'POST', body);
+		},
 		getSettings:      ()           => API.request('/settings'),
 		saveSettings:     (data)       => API.request('/settings', 'POST', data),
 		testKey:          (key)        => API.request('/settings/test-key', 'POST', { api_key: key }),
@@ -635,6 +639,41 @@
 				return;
 			}
 
+			if (button.id === 'aiseo-editor-internal-links') {
+				event.preventDefault();
+				if (!confirm('Yazı içine uygun iç linkler eklensin mi? Sonuç editöre aktarılacak, kaydı siz yapacaksınız.')) return;
+				UI.loading(button, true);
+				try {
+					const computeRes = await API.computeLinks(postId);
+					const suggestions = computeRes.data?.suggestions || [];
+					const selectedIds = suggestions
+						.slice(0, 3)
+						.map((item) => parseInt(item.id))
+						.filter((id) => Number.isFinite(id) && id > 0);
+
+					if (!selectedIds.length) {
+						UI.notice('aiseo-editor-notice', 'Bu yazı için iç link önerisi bulunamadı.', 'info');
+						return;
+					}
+
+					const applyRes = await API.applyLinks(postId, selectedIds, getEditorContent());
+					const data = applyRes.data || {};
+					if (!data.changed || !data.content) {
+						UI.notice('aiseo-editor-notice', 'Uygulanacak iç link değişikliği bulunamadı.', 'warning');
+						return;
+					}
+
+					applyEditorContent(data.content);
+					renderEditorInternalLinks(preview, suggestions.filter((item) => selectedIds.includes(parseInt(item.id))));
+					UI.notice('aiseo-editor-notice', 'İç linkler editöre aktarıldı. Kontrol edip Güncelle ile kaydedin.', 'success');
+				} catch (e) {
+					UI.notice('aiseo-editor-notice', e.message || i18n.error, 'error');
+				} finally {
+					UI.loading(button, false);
+				}
+				return;
+			}
+
 			if (button.id === 'aiseo-editor-regenerate') {
 				event.preventDefault();
 				if (!confirm('Mevcut yazı baştan oluşturulsun mu? Öneri editöre aktarılacak, kaydı siz yapacaksınız.')) return;
@@ -678,6 +717,22 @@
 				UI.notice('aiseo-editor-notice', 'Tam düzeltme editöre aktarıldı. Kontrol edip Güncelle ile kaydedin.', 'success');
 			}
 		});
+	}
+
+	function renderEditorInternalLinks(container, suggestions) {
+		if (!container) return;
+		const count = (suggestions || []).length;
+		const items = (suggestions || []).map((item) => {
+			const title = item.target_title || item.anchor_text || item.target_url || '';
+			const anchor = item.anchor_text ? ' <span class="aiseo-editor-help">(' + escapeHtml(item.anchor_text) + ')</span>' : '';
+			return '<li class="is-ok">' + escapeHtml(title) + anchor + '</li>';
+		}).join('');
+
+		container.innerHTML = '<div class="aiseo-editor-suggestion">' +
+			'<h4>İç Linkler Eklendi</h4>' +
+			'<p class="aiseo-editor-help">En uygun ilk ' + String(count) + ' iç link editöre aktarıldı.</p>' +
+			'<ul class="aiseo-editor-step-list">' + items + '</ul>' +
+			'</div>';
 	}
 
 	function initEditorPanelLegacy() {

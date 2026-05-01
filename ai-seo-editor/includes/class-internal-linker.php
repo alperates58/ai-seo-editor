@@ -95,7 +95,7 @@ class AISEO_Internal_Linker {
 		return $rows;
 	}
 
-	public function apply_suggestions( int $post_id, array $suggestion_ids ): string {
+	public function apply_suggestions( int $post_id, array $suggestion_ids, ?string $source_content = null ): string {
 		if ( empty( $suggestion_ids ) ) {
 			return '';
 		}
@@ -106,7 +106,7 @@ class AISEO_Internal_Linker {
 		}
 
 		global $wpdb;
-		$content = $post->post_content;
+		$content = $source_content ?? $post->post_content;
 		$appended_links = [];
 
 		foreach ( $suggestion_ids as $id ) {
