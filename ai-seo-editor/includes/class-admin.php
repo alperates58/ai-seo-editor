@@ -157,7 +157,7 @@ class AISEO_Admin {
 				<button type="button" class="button aiseo-editor-optimize" data-operation="improve_keyword_density"><?php esc_html_e( 'Keyword', 'ai-seo-editor' ); ?></button>
 				<button type="button" class="button aiseo-editor-optimize" data-operation="add_faq"><?php esc_html_e( 'FAQ', 'ai-seo-editor' ); ?></button>
 				<button type="button" class="button aiseo-editor-optimize" data-operation="improve_conclusion"><?php esc_html_e( 'Sonuç', 'ai-seo-editor' ); ?></button>
-				<button type="button" class="button" id="aiseo-editor-internal-links"><?php esc_html_e( 'İç Link', 'ai-seo-editor' ); ?></button>
+				<button type="button" class="button" id="aiseo-editor-internal-links" data-aiseo-action="internal-links"><?php esc_html_e( 'İç Link', 'ai-seo-editor' ); ?></button>
 			</div>
 
 			<div id="aiseo-editor-notice"></div>

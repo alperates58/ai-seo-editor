@@ -639,10 +639,11 @@
 				return;
 			}
 
-			if (button.id === 'aiseo-editor-internal-links') {
+			if (button.id === 'aiseo-editor-internal-links' || button.dataset.aiseoAction === 'internal-links') {
 				event.preventDefault();
 				if (!confirm('Yazı içine uygun iç linkler eklensin mi? Sonuç editöre aktarılacak, kaydı siz yapacaksınız.')) return;
 				UI.loading(button, true);
+				UI.notice('aiseo-editor-notice', 'İç link önerileri hesaplanıyor...', 'info');
 				try {
 					const computeRes = await API.computeLinks(postId);
 					const suggestions = computeRes.data?.suggestions || [];
