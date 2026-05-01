@@ -244,6 +244,7 @@ class AISEO_Rest_Controller {
 		$meta    = sanitize_textarea_field( $result['meta_description'] ?? $meta_before );
 		$content = wp_kses_post( $result['content'] ?? $content_before );
 		$tags    = array_map( 'sanitize_text_field', is_array( $result['suggested_tags'] ?? null ) ? $result['suggested_tags'] : [] );
+		$tags    = $this->filter_new_tags( $post_id, $tags, 3 );
 		$tokens  = (int) ( $result['tokens_used'] ?? 0 );
 
 		$this->logger->log_ai_operation(
@@ -605,5 +606,34 @@ class AISEO_Rest_Controller {
 
 	private function not_found(): WP_Error {
 		return new WP_Error( 'aiseo_not_found', __( 'Yazı bulunamadı.', 'ai-seo-editor' ), [ 'status' => 404 ] );
+	}
+
+	private function filter_new_tags( int $post_id, array $tags, int $limit = 3 ): array {
+		$existing = wp_get_post_tags( $post_id, [ 'fields' => 'names' ] );
+		$seen     = [];
+
+		foreach ( (array) $existing as $tag ) {
+			$key = mb_strtolower( trim( preg_replace( '/\s+/u', ' ', (string) $tag ) ) );
+			if ( $key !== '' ) {
+				$seen[ $key ] = true;
+			}
+		}
+
+		$clean = [];
+		foreach ( $tags as $tag ) {
+			$tag = trim( preg_replace( '/\s+/u', ' ', wp_strip_all_tags( (string) $tag ) ) );
+			$key = mb_strtolower( $tag );
+			if ( $tag === '' || mb_strlen( $tag ) < 4 || isset( $seen[ $key ] ) ) {
+				continue;
+			}
+
+			$seen[ $key ] = true;
+			$clean[]      = $tag;
+			if ( count( $clean ) >= $limit ) {
+				break;
+			}
+		}
+
+		return $clean;
 	}
 }

@@ -138,14 +138,18 @@ class AISEO_OpenAI_Client {
 		];
 	}
 
-	public function improve_readability( int $post_id, string $tone ): array {
+	public function improve_readability( int $post_id, string $tone, string $keyword = '' ): array {
 		$post    = get_post( $post_id );
 		$content = $post->post_content ?? '';
+		$density = $keyword ? aiseo_keyword_density( $content, $keyword ) : 0;
+		$keyword_note = $keyword
+			? " Odak kelime: \"{$keyword}\". Bu kelimeyi ve mevcut SEO sinyallerini koru; baslik, ilk paragraf veya H2 icinde zaten dogal geciyorsa yerini bozma. Anahtar kelimeyi gereksiz tekrar etme; mevcut yogunluk %{$density}, hedef aralik %0.8-1.8."
+			: '';
 
 		$messages = [
 			[
 				'role'    => 'system',
-				'content' => "Sen bir okunabilirlik editorusun. Verilen WordPress HTML icerigini bastan sona duzenle: cumleleri kisalt, uzun paragraflari bol, aktif anlatim kullan, gecis kelimeleri ekle, H2/H3 yapisini ve tum gercekleri koru. Ton: {$tone}. Icerigi kisaltma; kapsam zayifsa dogal ornekler ve aciklayici paragraflar ekle. YALNIZCA temiz WordPress HTML dondur.",
+				'content' => "Sen bir okunabilirlik editorusun. Verilen WordPress HTML icerigini bastan sona duzenle: cumleleri kisalt, uzun paragraflari bol, aktif anlatim kullan, gecis kelimeleri ekle, H2/H3 yapisini ve tum gercekleri koru. Ton: {$tone}.{$keyword_note} Icerigi kisaltma; kapsam zayifsa yalnizca dogal ornekler ve aciklayici paragraflar ekle. Yeni FAQ, yeni sonuc bolumu veya tekrar eden anahtar kelime listeleri ekleme. YALNIZCA temiz WordPress HTML dondur.",
 			],
 			[
 				'role'    => 'user',
@@ -204,13 +208,13 @@ class AISEO_OpenAI_Client {
 		$density = aiseo_keyword_density( $content, $keyword );
 
 		$instruction = $density > 2.5
-			? 'Anahtar kelime yogunlugunu azalt; dogal gorunum icin yuzde 1-1.5 araligini hedefle.'
-			: 'Anahtar kelimeyi dogal sekilde daha fazla kullan; yuzde 1-1.5 araligini hedefle.';
+			? 'Anahtar kelime yogunlugunu azalt; tekrar eden kullanımlari es anlamli veya baglamsal ifadelerle degistir ve yuzde 0.8-1.8 araligini hedefle.'
+			: 'Anahtar kelime eksik kalan kritik yerlere dogal sekilde eklenebilir; yuzde 0.8-1.8 araligini hedefle ve keyword stuffing yapma.';
 
 		$messages = [
 			[
 				'role'    => 'system',
-				'content' => "Sen bir SEO icerik editorusun. {$instruction} Icerigin tamamini WordPress HTML olarak yeniden duzenle. Odak kelimeyi baslik, ilk paragraf, en az bir H2 ve metin boyunca dogal bicimde kullan. Gercekleri koru, gerekirse kisa aciklayici eklemeler yap. YALNIZCA temiz WordPress HTML dondur.",
+				'content' => "Sen bir SEO icerik editorusun. {$instruction} Icerigin tamamini WordPress HTML olarak yeniden duzenle. Odak kelimeyi yalnizca gerekli yerlerde kullan: ilk paragraf ve en fazla bir H2 yeterlidir. Yeni FAQ, sonuc bolumu veya anahtar kelime listesi ekleme. Gercekleri koru, gerekirse kisa aciklayici eklemeler yap. YALNIZCA temiz WordPress HTML dondur.",
 			],
 			[
 				'role'    => 'user',
@@ -337,16 +341,19 @@ class AISEO_OpenAI_Client {
 			'meta_description' => $yoast->get_meta_description( $post_id ),
 			'word_count'       => aiseo_count_words( $content ),
 			'keyword_density'  => aiseo_keyword_density( $content, $keyword ),
+			'has_faq'          => $this->content_has_faq( $content ),
+			'has_conclusion'   => $this->content_has_conclusion( $content ),
+			'existing_tags'    => wp_get_post_tags( $post_id, [ 'fields' => 'names' ] ),
 		];
 
 		$messages = [
 			[
 				'role'    => 'system',
-				'content' => 'Sen deneyimli bir Turkce SEO editorusun. Verilen WordPress yazisini Yoast benzeri kriterlere gore kapsamli bicimde iyilestir. JSON dondur: {"title":"...","meta_description":"...","content":"<p>...</p>","suggested_tags":["..."]}. Kurallar: baslik 50-60 karakter, meta 120-158 karakter, odak kelime baslikta/metada/ilk paragrafta/en az bir H2 icinde dogal gecsin, icerik 1000 kelimenin altindaysa kapsamli ama gercekci bicimde genislet, en az 2 H2 ve uygun H3 kullan, kisa paragraflar yaz, gecis kelimeleri ekle, FAQ ve guclu sonuc bolumu ekle, mevcut gercekleri bozma, markdown fence/html/body etiketi kullanma. Etiketler 8-12 adet olsun; tek kelimelik kisa etiket yerine 2-4 kelimelik arama niyetli etiketleri tercih et.',
+				'content' => 'Sen deneyimli bir Turkce SEO editorusun. Verilen WordPress yazisini Yoast benzeri kriterlere gore kapsamli bicimde iyilestir. JSON dondur: {"title":"...","meta_description":"...","content":"<p>...</p>","suggested_tags":["..."]}. Kurallar: baslik 50-60 karakter, meta 120-158 karakter, odak kelime baslikta/metada/ilk paragrafta/en fazla bir H2 icinde dogal gecsin. Anahtar kelime yogunlugunu %0.8-1.8 araliginda tut; ayni kelimeyi sirf skor icin tekrar etme. Okunabilirligi dusurme: kisa cumleler, kisa paragraflar, aktif anlatim ve gecis kelimeleri kullan. Icerik 1000 kelimenin altindaysa kapsamli ama gercekci bicimde genislet, en az 2 H2 ve uygun H3 kullan. Mevcut FAQ varsa yeni FAQ ekleme; mevcut sonuc bolumu varsa ikinci sonuc bolumu ekleme. Mevcut gercekleri bozma, markdown fence/html/body etiketi kullanma. suggested_tags sadece mevcut etiketlerde olmayan 0-3 yeni etiket icersin; yeterli etiket varsa bos dizi dondur.',
 			],
 			[
 				'role'    => 'user',
-				'content' => "Odak kelime: {$keyword}\nTon: {$tone}\nMevcut baslik: {$current['title']}\nMevcut meta: {$current['meta_description']}\nKelime sayisi: {$current['word_count']}\nAnahtar kelime yogunlugu: %{$current['keyword_density']}\n\nMevcut HTML icerik:\n" . $this->limit_content_for_prompt( $content, 18000 ),
+				'content' => "Odak kelime: {$keyword}\nTon: {$tone}\nMevcut baslik: {$current['title']}\nMevcut meta: {$current['meta_description']}\nKelime sayisi: {$current['word_count']}\nAnahtar kelime yogunlugu: %{$current['keyword_density']}\nFAQ var mi: " . ( $current['has_faq'] ? 'evet' : 'hayir' ) . "\nSonuc bolumu var mi: " . ( $current['has_conclusion'] ? 'evet' : 'hayir' ) . "\nMevcut etiketler: " . implode( ', ', (array) $current['existing_tags'] ) . "\n\nMevcut HTML icerik:\n" . $this->limit_content_for_prompt( $content, 18000 ),
 			],
 		];
 
@@ -499,6 +506,24 @@ Kurallar: Icerik {$lang_str} dilinde olacak, ton: {$tone}, yaklasik {$target_wc}
 		$html = preg_replace( '/(?:<\/body>|<\/html>)\s*$/i', '', $html );
 
 		return trim( (string) $html );
+	}
+
+	private function content_has_faq( string $content ): bool {
+		$text = mb_strtolower( aiseo_strip_html( $content ) );
+		return str_contains( mb_strtolower( $content ), 'aiseo-faq-section' )
+			|| str_contains( $text, 'sikca sorulan sorular' )
+			|| str_contains( $text, 'sıkça sorulan sorular' )
+			|| str_contains( $text, 'sss' );
+	}
+
+	private function content_has_conclusion( string $content ): bool {
+		foreach ( aiseo_extract_headings( $content ) as $heading ) {
+			$text = mb_strtolower( $heading['text'] ?? '' );
+			if ( in_array( $text, [ 'sonuc', 'sonuç', 'sonuç bölümü', 'sonuc bolumu' ], true ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private function clean_tags( array $tags ): array {

@@ -622,7 +622,7 @@
 
 			if (button.id === 'aiseo-editor-fix-all') {
 				event.preventDefault();
-				if (!confirm('Başlık, meta, okunabilirlik ve FAQ için tek paket öneri hazırlansın mı? Değişiklikler editöre aktarılacak, kaydı siz yapacaksınız.')) return;
+				if (!confirm('Başlık, meta, SEO ve okunabilirlik dengeli şekilde iyileştirilsin mi? Mevcut FAQ/etiketler tekrar eklenmez; değişiklikler editöre aktarılacak, kaydı siz yapacaksınız.')) return;
 				UI.loading(button, true);
 				try {
 					const res = await API.fullOptimize(postId);
@@ -723,7 +723,7 @@
 
 		if (fixAllBtn) {
 			fixAllBtn.addEventListener('click', async () => {
-				if (!confirm('Başlık, meta, okunabilirlik ve FAQ için tek paket öneri hazırlansın mı? Değişiklikler editöre aktarılacak, kaydı siz yapacaksınız.')) return;
+				if (!confirm('Başlık, meta, SEO ve okunabilirlik dengeli şekilde iyileştirilsin mi? Mevcut FAQ/etiketler tekrar eklenmez; değişiklikler editöre aktarılacak, kaydı siz yapacaksınız.')) return;
 				UI.loading(fixAllBtn, true);
 				try {
 					const res = await API.fullOptimize(postId);
@@ -920,7 +920,12 @@
 		const cleanTags = cleanTagList(tags);
 		if (!cleanTags.length) return;
 
-		const tagString = cleanTags.join(', ');
+		const currentTags = getCurrentEditorTags();
+		const currentKeys = new Set(currentTags.map(normalizeTag));
+		const newTags = cleanTags.filter((tag) => !currentKeys.has(normalizeTag(tag))).slice(0, 3);
+		if (!newTags.length) return;
+
+		const tagString = newTags.join(', ');
 		const tagInput = document.getElementById('new-tag-post_tag');
 		const tagsBox = document.getElementById('tagsdiv-post_tag');
 		if (tagInput && tagsBox && window.tagBox?.flushTags) {
@@ -932,7 +937,7 @@
 		const taxInput = document.getElementById('tax-input-post_tag') || document.querySelector('[name="tax_input[post_tag]"]');
 		if (taxInput) {
 			const current = taxInput.value ? taxInput.value.split(',').map((tag) => tag.trim()).filter(Boolean) : [];
-			taxInput.value = Array.from(new Set(current.concat(cleanTags))).join(', ');
+			taxInput.value = mergeTags(current, newTags).slice(0, 12).join(', ');
 			taxInput.dispatchEvent(new Event('change', { bubbles: true }));
 		}
 	}
@@ -992,10 +997,49 @@
 	}
 
 	function cleanTagList(tags) {
-		return Array.from(new Set((Array.isArray(tags) ? tags : [])
-			.map((tag) => String(tag || '').replace(/[#,]/g, ' ').replace(/\s+/g, ' ').trim())
-			.filter((tag) => tag.length >= 4)
-			.slice(0, 12)));
+		const clean = [];
+		const seen = new Set();
+		(Array.isArray(tags) ? tags : []).forEach((tag) => {
+			const value = String(tag || '').replace(/[#,]/g, ' ').replace(/\s+/g, ' ').trim();
+			const key = normalizeTag(value);
+			if (value.length < 4 || !key || seen.has(key)) return;
+			seen.add(key);
+			clean.push(value);
+		});
+		return clean.slice(0, 3);
+	}
+
+	function getCurrentEditorTags() {
+		const tags = [];
+		document.querySelectorAll('#tagsdiv-post_tag .tagchecklist .ntdelbutton, #tagsdiv-post_tag .tagchecklist button').forEach((button) => {
+			const text = button.parentElement?.textContent || '';
+			const tag = text.replace(/[×x]/g, ' ').replace(/\s+/g, ' ').trim();
+			if (tag) tags.push(tag);
+		});
+
+		const taxInput = document.getElementById('tax-input-post_tag') || document.querySelector('[name="tax_input[post_tag]"]');
+		if (taxInput?.value) {
+			tags.push(...taxInput.value.split(',').map((tag) => tag.trim()).filter(Boolean));
+		}
+
+		return tags;
+	}
+
+	function normalizeTag(tag) {
+		return String(tag || '').toLocaleLowerCase('tr-TR').replace(/[#,]/g, ' ').replace(/\s+/g, ' ').trim();
+	}
+
+	function mergeTags(current, additions) {
+		const seen = new Set();
+		const merged = [];
+		current.concat(additions).forEach((tag) => {
+			const clean = String(tag || '').replace(/[#,]/g, ' ').replace(/\s+/g, ' ').trim();
+			const key = normalizeTag(clean);
+			if (!key || seen.has(key)) return;
+			seen.add(key);
+			merged.push(clean);
+		});
+		return merged;
 	}
 
 	function editorOperationLabel(operation) {

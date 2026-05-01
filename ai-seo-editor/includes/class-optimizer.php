@@ -27,7 +27,7 @@ class AISEO_Optimizer {
 				'optimize_meta'           => $this->client->optimize_meta( $post_id, $keyword ),
 				'improve_intro'           => $this->client->improve_intro( $post_id, $keyword, $tone ),
 				'improve_structure'       => $this->client->improve_structure( $post_id, $keyword ),
-				'improve_readability'     => $this->client->improve_readability( $post_id, $tone ),
+				'improve_readability'     => $this->client->improve_readability( $post_id, $tone, $keyword ),
 				'improve_keyword_density' => $this->client->improve_keyword_density( $post_id, $keyword ),
 				'add_faq'                 => $this->client->generate_faq( $post_id, $keyword ),
 				'improve_conclusion'      => $this->client->improve_conclusion( $post_id, $keyword ),
