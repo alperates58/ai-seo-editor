@@ -9,7 +9,7 @@ class AISEO_OpenAI_Client {
 	private string $model;
 	private int $max_tokens;
 	private string $base_url = 'https://api.openai.com/v1';
-	private int $timeout     = 90;
+	private int $timeout     = 120;
 
 	public function __construct( AISEO_Settings $settings ) {
 		$this->api_key    = $settings->get_api_key();
@@ -24,7 +24,7 @@ class AISEO_OpenAI_Client {
 		bool $json_mode    = false
 	): array {
 		if ( empty( $this->api_key ) ) {
-			throw new RuntimeException( 'OpenAI API anahtarı tanımlanmamış.' );
+			throw new RuntimeException( 'OpenAI API anahtari tanimlanmamis.' );
 		}
 
 		$payload = [
@@ -49,15 +49,15 @@ class AISEO_OpenAI_Client {
 		$messages = [
 			[
 				'role'    => 'system',
-				'content' => 'Sen bir SEO başlık uzmanısın. Verilen odak kelimeyi içeren, 50-60 karakter arasında, ilgi çekici ve tıklanabilir bir SEO başlığı üret. YALNIZCA başlık metnini döndür, ekstra açıklama yapma.',
+				'content' => 'Sen bir SEO baslik uzmanisin. Odak kelimeyi iceren, 50-60 karakter arasinda, net ve tiklanabilir bir SEO basligi uret. YALNIZCA baslik metnini dondur.',
 			],
 			[
 				'role'    => 'user',
-				'content' => "Odak kelime: {$keyword}\nMevcut başlık: {$title}\nİçerik özeti: " . aiseo_truncate( $intro, 200 ),
+				'content' => "Odak kelime: {$keyword}\nMevcut baslik: {$title}\nIcerik ozeti: " . aiseo_truncate( $intro, 300 ),
 			],
 		];
 
-		$response = $this->chat_completion( $messages, 100, 0.7 );
+		$response = $this->chat_completion( $messages, 120, 0.6 );
 		return [
 			'before' => $title,
 			'after'  => trim( $response['content'] ?? '' ),
@@ -74,20 +74,20 @@ class AISEO_OpenAI_Client {
 		$messages = [
 			[
 				'role'    => 'system',
-				'content' => 'Sen bir SEO meta açıklama uzmanısın. 120-158 karakter arasında, odak kelimeyi içeren, okuyucuyu tıklamaya teşvik eden bir meta açıklama yaz. YALNIZCA meta açıklamayı döndür.',
+				'content' => 'Sen bir SEO meta aciklama uzmanisin. 120-158 karakter arasinda, odak kelimeyi iceren, dogal ve tiklamaya tesvik eden bir meta aciklama yaz. YALNIZCA meta aciklamayi dondur.',
 			],
 			[
 				'role'    => 'user',
-				'content' => "Odak kelime: {$keyword}\nMevcut meta: {$current}\nİçerik: " . aiseo_truncate( $content, 500 ),
+				'content' => "Odak kelime: {$keyword}\nMevcut meta: {$current}\nIcerik: " . aiseo_truncate( $content, 900 ),
 			],
 		];
 
-		$response = $this->chat_completion( $messages, 200, 0.7 );
+		$response = $this->chat_completion( $messages, 220, 0.6 );
 		return [
-			'before'    => $current,
-			'after'     => trim( $response['content'] ?? '' ),
-			'field'     => 'meta',
-			'meta_key'  => '_aiseo_meta_description',
+			'before'   => $current,
+			'after'    => trim( $response['content'] ?? '' ),
+			'field'    => 'meta',
+			'meta_key' => '_aiseo_meta_description',
 		];
 	}
 
@@ -99,15 +99,15 @@ class AISEO_OpenAI_Client {
 		$messages = [
 			[
 				'role'    => 'system',
-				'content' => "Sen bir içerik yazarısın. Giriş paragrafını şu kurallara göre yeniden yaz: 1) İlk cümlede odak kelime geçmeli, 2) Okuyucuyu içeriğe çekmeli, 3) {$tone} tonunda olmalı, 4) 100-150 kelime arasında olmalı. YALNIZCA yeniden yazılmış paragrafı döndür.",
+				'content' => "Sen bir icerik yazarisisin. Giris paragrafini yeniden yaz: ilk cumlede odak kelime gecsin, okuyucuyu konuya ceksin, {$tone} tonunda olsun, 100-150 kelime olsun. YALNIZCA paragraf metnini dondur.",
 			],
 			[
 				'role'    => 'user',
-				'content' => "Odak kelime: {$keyword}\nMevcut giriş: {$intro}",
+				'content' => "Odak kelime: {$keyword}\nMevcut giris: {$intro}",
 			],
 		];
 
-		$response = $this->chat_completion( $messages, 300, 0.7 );
+		$response = $this->chat_completion( $messages, 380, 0.65 );
 		return [
 			'before' => $intro,
 			'after'  => trim( $response['content'] ?? '' ),
@@ -117,50 +117,46 @@ class AISEO_OpenAI_Client {
 
 	public function improve_structure( int $post_id, string $keyword ): array {
 		$post    = get_post( $post_id );
-		$content = aiseo_strip_html( apply_filters( 'the_content', $post->post_content ?? '' ) );
+		$content = $post->post_content ?? '';
 
 		$messages = [
 			[
 				'role'    => 'system',
-				'content' => 'Sen bir içerik stratejistisin. İçerik yapısı için optimize H2 ve H3 başlıkları üret. JSON formatında döndür: {"headings":[{"level":"h2","text":"..."},{"level":"h3","text":"..."}],"rationale":"..."}',
+				'content' => 'Sen bir SEO icerik editorusun. WordPress HTML icerigini koruyarak H2/H3 yapisini iyilestir. En az 2 anlamli H2 kullan, uygun yerlerde H3 ekle, en az bir H2 icinde odak kelimeyi dogal bicimde gecir. Mevcut gercekleri koru. YALNIZCA temiz WordPress HTML dondur; aciklama, markdown fence, html/body etiketi ekleme.',
 			],
 			[
 				'role'    => 'user',
-				'content' => "Odak kelime: {$keyword}\nİçerik: " . aiseo_truncate( $content, 1000 ),
+				'content' => "Odak kelime: {$keyword}\nIcerik:\n" . $this->limit_content_for_prompt( $content, 12000 ),
 			],
 		];
 
-		$response = $this->chat_completion( $messages, 600, 0.7, true );
-		$parsed   = $this->parse_json_response( $response['content'] ?? '' );
-
+		$response = $this->chat_completion( $messages, 2800, 0.55 );
 		return [
-			'before' => '',
-			'after'  => $response['content'] ?? '',
-			'field'  => 'structure',
-			'data'   => $parsed,
+			'before' => $content,
+			'after'  => $this->clean_model_html( $response['content'] ?? '' ),
+			'field'  => 'post_content',
 		];
 	}
 
 	public function improve_readability( int $post_id, string $tone ): array {
 		$post    = get_post( $post_id );
 		$content = $post->post_content ?? '';
-		$excerpt = aiseo_strip_html( apply_filters( 'the_content', $content ) );
 
 		$messages = [
 			[
 				'role'    => 'system',
-				'content' => "Sen bir okunabilirlik editörüsün. Verilen HTML içeriği şu kurallara göre yeniden yaz: 1) Cümleleri kısalt (max 20 kelime), 2) Aktif ses kullan, 3) Geçiş kelimeleri ekle, 4) Tüm gerçekleri koru, 5) {$tone} tonunu koru. YALNIZCA HTML içeriğini (<p>,<ul>,<ol>,<strong> etiketleriyle) döndür.",
+				'content' => "Sen bir okunabilirlik editorusun. Verilen WordPress HTML icerigini bastan sona duzenle: cumleleri kisalt, uzun paragraflari bol, aktif anlatim kullan, gecis kelimeleri ekle, H2/H3 yapisini ve tum gercekleri koru. Ton: {$tone}. Icerigi kisaltma; kapsam zayifsa dogal ornekler ve aciklayici paragraflar ekle. YALNIZCA temiz WordPress HTML dondur.",
 			],
 			[
 				'role'    => 'user',
-				'content' => "Ton: {$tone}\nİçerik:\n" . aiseo_truncate( $excerpt, 1500 ),
+				'content' => "Ton: {$tone}\nIcerik:\n" . $this->limit_content_for_prompt( $content, 14000 ),
 			],
 		];
 
-		$response = $this->chat_completion( $messages, 2000, 0.6 );
+		$response = $this->chat_completion( $messages, 3800, 0.55 );
 		return [
 			'before' => $content,
-			'after'  => trim( $response['content'] ?? '' ),
+			'after'  => $this->clean_model_html( $response['content'] ?? '' ),
 			'field'  => 'post_content',
 		];
 	}
@@ -172,21 +168,21 @@ class AISEO_OpenAI_Client {
 		$messages = [
 			[
 				'role'    => 'system',
-				'content' => "Sen bir FAQ uzmanısın. İçerik ve odak kelimeye göre {$count} adet soru-cevap üret. JSON formatında döndür: {\"faqs\":[{\"question\":\"...\",\"answer\":\"...\"}]}",
+				'content' => "Sen bir FAQ uzmanisin. Icerik ve odak kelimeye gore {$count} adet soru-cevap uret. Cevaplar 45-80 kelime araliginda, net ve faydali olsun. JSON formatinda dondur: {\"faqs\":[{\"question\":\"...\",\"answer\":\"...\"}]}",
 			],
 			[
 				'role'    => 'user',
-				'content' => "Odak kelime: {$keyword}\nİçerik: " . aiseo_truncate( $content, 1500 ),
+				'content' => "Odak kelime: {$keyword}\nIcerik: " . $this->limit_content_for_prompt( $content, 5000 ),
 			],
 		];
 
-		$response = $this->chat_completion( $messages, 1000, 0.7, true );
+		$response = $this->chat_completion( $messages, 1400, 0.65, true );
 		$parsed   = $this->parse_json_response( $response['content'] ?? '' );
 
 		$faqs = $parsed['faqs'] ?? [];
 		$html = '';
 		if ( ! empty( $faqs ) ) {
-			$html = '<div class="aiseo-faq-section"><h2>' . esc_html__( 'Sıkça Sorulan Sorular', 'ai-seo-editor' ) . '</h2>';
+			$html = '<div class="aiseo-faq-section"><h2>' . esc_html__( 'Sikca Sorulan Sorular', 'ai-seo-editor' ) . '</h2>';
 			foreach ( $faqs as $faq ) {
 				$html .= '<div class="faq-item"><h3>' . esc_html( $faq['question'] ?? '' ) . '</h3><p>' . esc_html( $faq['answer'] ?? '' ) . '</p></div>';
 			}
@@ -194,37 +190,38 @@ class AISEO_OpenAI_Client {
 		}
 
 		return [
-			'before' => '',
-			'after'  => $html,
-			'field'  => 'append_content',
-			'data'   => $faqs,
+			'before'      => '',
+			'after'       => $html,
+			'field'       => 'append_content',
+			'data'        => $faqs,
+			'tokens_used' => $response['total_tokens'] ?? 0,
 		];
 	}
 
 	public function improve_keyword_density( int $post_id, string $keyword ): array {
 		$post    = get_post( $post_id );
-		$content = aiseo_strip_html( apply_filters( 'the_content', $post->post_content ?? '' ) );
+		$content = $post->post_content ?? '';
 		$density = aiseo_keyword_density( $content, $keyword );
 
 		$instruction = $density > 2.5
-			? 'Anahtar kelime yoğunluğunu azalt (doğal görünüm için %1-1.5 hedefle).'
-			: 'Anahtar kelimeyi doğal şekilde daha fazla kullan (%1-1.5 hedefle).';
+			? 'Anahtar kelime yogunlugunu azalt; dogal gorunum icin yuzde 1-1.5 araligini hedefle.'
+			: 'Anahtar kelimeyi dogal sekilde daha fazla kullan; yuzde 1-1.5 araligini hedefle.';
 
 		$messages = [
 			[
 				'role'    => 'system',
-				'content' => "Sen bir SEO içerik editörüsün. {$instruction} İçeriği yeniden yaz. HTML formatında döndür.",
+				'content' => "Sen bir SEO icerik editorusun. {$instruction} Icerigin tamamini WordPress HTML olarak yeniden duzenle. Odak kelimeyi baslik, ilk paragraf, en az bir H2 ve metin boyunca dogal bicimde kullan. Gercekleri koru, gerekirse kisa aciklayici eklemeler yap. YALNIZCA temiz WordPress HTML dondur.",
 			],
 			[
 				'role'    => 'user',
-				'content' => "Odak kelime: {$keyword}\nMevcut yoğunluk: %{$density}\nİçerik: " . aiseo_truncate( $content, 1500 ),
+				'content' => "Odak kelime: {$keyword}\nMevcut yogunluk: %{$density}\nIcerik:\n" . $this->limit_content_for_prompt( $content, 14000 ),
 			],
 		];
 
-		$response = $this->chat_completion( $messages, 2000, 0.6 );
+		$response = $this->chat_completion( $messages, 3800, 0.55 );
 		return [
 			'before' => $post->post_content ?? '',
-			'after'  => trim( $response['content'] ?? '' ),
+			'after'  => $this->clean_model_html( $response['content'] ?? '' ),
 			'field'  => 'post_content',
 		];
 	}
@@ -236,16 +233,16 @@ class AISEO_OpenAI_Client {
 		$messages = [
 			[
 				'role'    => 'system',
-				'content' => 'Sen bir içerik yazarısın. Verilen içerik için güçlü bir sonuç bölümü yaz. Anahtar kelimeyi kullan, okuyucuya eylem çağrısı yap, 100-150 kelime olsun. YALNIZCA sonuç paragrafını HTML\'de döndür.',
+				'content' => 'Sen bir icerik yazarisisin. Verilen icerik icin guclu bir sonuc bolumu yaz. Anahtar kelimeyi kullan, okuyucuya eylem cagrisi yap, 100-150 kelime olsun. YALNIZCA sonuc paragrafini HTML olarak dondur.',
 			],
 			[
 				'role'    => 'user',
-				'content' => "Odak kelime: {$keyword}\nİçerik: " . aiseo_truncate( $content, 1000 ),
+				'content' => "Odak kelime: {$keyword}\nIcerik: " . $this->limit_content_for_prompt( $content, 3000 ),
 			],
 		];
 
-		$response = $this->chat_completion( $messages, 400, 0.7 );
-		$html     = '<h2>' . esc_html__( 'Sonuç', 'ai-seo-editor' ) . '</h2>' . trim( $response['content'] ?? '' );
+		$response = $this->chat_completion( $messages, 500, 0.65 );
+		$html     = '<h2>' . esc_html__( 'Sonuc', 'ai-seo-editor' ) . '</h2>' . $this->clean_model_html( $response['content'] ?? '' );
 
 		return [
 			'before' => '',
@@ -270,15 +267,15 @@ class AISEO_OpenAI_Client {
 		$messages = [
 			[
 				'role'    => 'system',
-				'content' => 'Sen bir iç linkleme uzmanısın. Kaynak içerik ve hedef yazıları analiz ederek en uygun iç link fırsatlarını bul. JSON formatında döndür: {"suggestions":[{"anchor_text":"...","target_post_id":0,"target_url":"...","context_sentence":"...","relevance_reason":"..."}]}',
+				'content' => 'Sen bir ic linkleme uzmanisin. Kaynak icerik ve hedef yazilari analiz ederek en uygun ic link firsatlarini bul. JSON formatinda dondur: {"suggestions":[{"anchor_text":"...","target_post_id":0,"target_url":"...","context_sentence":"...","relevance_reason":"..."}]}',
 			],
 			[
 				'role'    => 'user',
-				'content' => "Kaynak içerik:\n" . aiseo_truncate( $content, 1000 ) . "\n\nHedef yazılar:\n" . wp_json_encode( $posts_json, JSON_UNESCAPED_UNICODE ),
+				'content' => "Kaynak icerik:\n" . $this->limit_content_for_prompt( $content, 4000 ) . "\n\nHedef yazilar:\n" . wp_json_encode( $posts_json, JSON_UNESCAPED_UNICODE ),
 			],
 		];
 
-		$response = $this->chat_completion( $messages, 1000, 0.5, true );
+		$response = $this->chat_completion( $messages, 1200, 0.5, true );
 		$parsed   = $this->parse_json_response( $response['content'] ?? '' );
 
 		return [
@@ -299,7 +296,7 @@ class AISEO_OpenAI_Client {
 		if ( empty( $missing ) ) {
 			return [
 				'before' => '',
-				'after'  => __( 'Tüm görsellerde alt metin mevcut.', 'ai-seo-editor' ),
+				'after'  => __( 'Tum gorsellerde alt metin mevcut.', 'ai-seo-editor' ),
 				'field'  => 'image_alts',
 				'alts'   => [],
 			];
@@ -308,15 +305,15 @@ class AISEO_OpenAI_Client {
 		$messages = [
 			[
 				'role'    => 'system',
-				'content' => 'Sen bir SEO görsel uzmanısın. Verilen görseller için odak kelimeyi içeren, açıklayıcı alt metinler üret. JSON formatında döndür: {"alts":[{"src":"...","alt":"..."}]}',
+				'content' => 'Sen bir SEO gorsel uzmanisin. Verilen gorseller icin odak kelimeyi dogal bicimde iceren, aciklayici alt metinler uret. JSON formatinda dondur: {"alts":[{"src":"...","alt":"..."}]}',
 			],
 			[
 				'role'    => 'user',
-				'content' => "Odak kelime: {$keyword}\nGörseller:\n" . wp_json_encode( array_slice( $missing, 0, 10 ), JSON_UNESCAPED_UNICODE ),
+				'content' => "Odak kelime: {$keyword}\nGorseller:\n" . wp_json_encode( array_slice( $missing, 0, 10 ), JSON_UNESCAPED_UNICODE ),
 			],
 		];
 
-		$response = $this->chat_completion( $messages, 500, 0.6, true );
+		$response = $this->chat_completion( $messages, 600, 0.6, true );
 		$parsed   = $this->parse_json_response( $response['content'] ?? '' );
 
 		return [
@@ -325,6 +322,49 @@ class AISEO_OpenAI_Client {
 			'field'  => 'image_alts',
 			'alts'   => $parsed['alts'] ?? [],
 		];
+	}
+
+	public function optimize_full_post( int $post_id, string $keyword, string $tone ): array {
+		$post = get_post( $post_id );
+		if ( ! $post instanceof WP_Post ) {
+			return [];
+		}
+
+		$yoast   = new AISEO_Yoast_Integration();
+		$content = $post->post_content ?? '';
+		$current = [
+			'title'            => get_the_title( $post_id ),
+			'meta_description' => $yoast->get_meta_description( $post_id ),
+			'word_count'       => aiseo_count_words( $content ),
+			'keyword_density'  => aiseo_keyword_density( $content, $keyword ),
+		];
+
+		$messages = [
+			[
+				'role'    => 'system',
+				'content' => 'Sen deneyimli bir Turkce SEO editorusun. Verilen WordPress yazisini Yoast benzeri kriterlere gore kapsamli bicimde iyilestir. JSON dondur: {"title":"...","meta_description":"...","content":"<p>...</p>","suggested_tags":["..."]}. Kurallar: baslik 50-60 karakter, meta 120-158 karakter, odak kelime baslikta/metada/ilk paragrafta/en az bir H2 icinde dogal gecsin, icerik 1000 kelimenin altindaysa kapsamli ama gercekci bicimde genislet, en az 2 H2 ve uygun H3 kullan, kisa paragraflar yaz, gecis kelimeleri ekle, FAQ ve guclu sonuc bolumu ekle, mevcut gercekleri bozma, markdown fence/html/body etiketi kullanma. Etiketler 8-12 adet olsun; tek kelimelik kisa etiket yerine 2-4 kelimelik arama niyetli etiketleri tercih et.',
+			],
+			[
+				'role'    => 'user',
+				'content' => "Odak kelime: {$keyword}\nTon: {$tone}\nMevcut baslik: {$current['title']}\nMevcut meta: {$current['meta_description']}\nKelime sayisi: {$current['word_count']}\nAnahtar kelime yogunlugu: %{$current['keyword_density']}\n\nMevcut HTML icerik:\n" . $this->limit_content_for_prompt( $content, 18000 ),
+			],
+		];
+
+		$response = $this->chat_completion( $messages, 5000, 0.6, true );
+		$parsed   = $this->parse_json_response( $response['content'] ?? '' );
+
+		if ( ! empty( $parsed['content'] ) ) {
+			$parsed['content'] = $this->clean_model_html( (string) $parsed['content'] );
+		}
+
+		if ( isset( $parsed['suggested_tags'] ) && is_array( $parsed['suggested_tags'] ) ) {
+			$parsed['suggested_tags'] = $this->clean_tags( $parsed['suggested_tags'] );
+		}
+
+		return array_merge( $parsed, [
+			'tokens_used'  => $response['total_tokens'] ?? 0,
+			'raw_response' => $response['content'] ?? '',
+		] );
 	}
 
 	public function generate_full_article( array $params ): array {
@@ -336,28 +376,32 @@ class AISEO_OpenAI_Client {
 		$include_faq = (bool) ( $params['include_faq'] ?? true );
 		$aux_kw      = sanitize_text_field( $params['aux_keywords'] ?? '' );
 
-		$lang_map = [ 'tr' => 'Türkçe', 'en' => 'English', 'de' => 'Deutsch', 'fr' => 'Français', 'es' => 'Español' ];
-		$lang_str = $lang_map[ $language ] ?? 'Türkçe';
+		$lang_map = [ 'tr' => 'Turkce', 'en' => 'English', 'de' => 'Deutsch', 'fr' => 'Francais', 'es' => 'Espanol' ];
+		$lang_str = $lang_map[ $language ] ?? 'Turkce';
 
-		$faq_note = $include_faq ? '- "faq" dizisi en az 5 soru-cevap içermeli' : '';
-		$aux_note = $aux_kw ? "\nYardımcı kelimeler: {$aux_kw}" : '';
+		$faq_note = $include_faq ? '- "faq" dizisi en az 5 soru-cevap icermeli' : '';
+		$aux_note = $aux_kw ? "\nYardimci kelimeler: {$aux_kw}" : '';
 
 		$messages = [
 			[
 				'role'    => 'system',
-				'content' => "Sen uzman bir SEO içerik yazarısın. Verilen parametrelerle tam makale üret. JSON formatında döndür:
-{\"title\":\"...\",\"meta_description\":\"...\",\"focus_keyword\":\"...\",\"content\":{\"introduction\":\"<p>...</p>\",\"sections\":[{\"heading\":\"H2 başlık\",\"content\":\"<p>...</p>\",\"subsections\":[{\"heading\":\"H3 başlık\",\"content\":\"<p>...</p>\"}]}],\"conclusion\":\"<p>...</p>\",\"faq\":[{\"question\":\"...\",\"answer\":\"...\"}]},\"word_count_estimate\":0,\"suggested_tags\":[]}
-Kurallar: İçerik {$lang_str} dilinde olacak, ton: {$tone}, yaklaşık {$target_wc} kelime, Google EEAT prensiplerine uygun, doğal ve okuyucu odaklı.{$faq_note}",
+				'content' => "Sen uzman bir SEO icerik yazarisisin. Verilen parametrelerle tam makale uret. JSON formatinda dondur:
+{\"title\":\"...\",\"meta_description\":\"...\",\"focus_keyword\":\"...\",\"content\":{\"introduction\":\"<p>...</p>\",\"sections\":[{\"heading\":\"H2 baslik\",\"content\":\"<p>...</p>\",\"subsections\":[{\"heading\":\"H3 baslik\",\"content\":\"<p>...</p>\"}]}],\"conclusion\":\"<p>...</p>\",\"faq\":[{\"question\":\"...\",\"answer\":\"...\"}]},\"word_count_estimate\":0,\"suggested_tags\":[]}
+Kurallar: Icerik {$lang_str} dilinde olacak, ton: {$tone}, yaklasik {$target_wc} kelime, Google EEAT prensiplerine uygun, dogal ve okuyucu odakli. suggested_tags alani 8-12 adet, 2-4 kelimelik, kisa olmayan SEO etiketi icermeli.{$faq_note}",
 			],
 			[
 				'role'    => 'user',
-				'content' => "Odak kelime: {$keyword}\nBaşlık: {$title}{$aux_note}\nHedef kelime sayısı: {$target_wc}",
+				'content' => "Odak kelime: {$keyword}\nBaslik: {$title}{$aux_note}\nHedef kelime sayisi: {$target_wc}",
 			],
 		];
 
-		$tokens   = min( 4000, $this->max_tokens );
+		$tokens   = min( 5000, max( 3000, $this->max_tokens ) );
 		$response = $this->chat_completion( $messages, $tokens, 0.7, true );
 		$parsed   = $this->parse_json_response( $response['content'] ?? '' );
+
+		if ( isset( $parsed['suggested_tags'] ) && is_array( $parsed['suggested_tags'] ) ) {
+			$parsed['suggested_tags'] = $this->clean_tags( $parsed['suggested_tags'] );
+		}
 
 		return array_merge( $parsed, [
 			'tokens_used'  => $response['total_tokens'] ?? 0,
@@ -395,7 +439,7 @@ Kurallar: İçerik {$lang_str} dilinde olacak, ton: {$tone}, yaklaşık {$target
 		);
 
 		if ( is_wp_error( $response ) ) {
-			throw new RuntimeException( 'HTTP isteği başarısız: ' . $response->get_error_message() );
+			throw new RuntimeException( 'HTTP istegi basarisiz: ' . $response->get_error_message() );
 		}
 
 		$http_code = wp_remote_retrieve_response_code( $response );
@@ -403,11 +447,11 @@ Kurallar: İçerik {$lang_str} dilinde olacak, ton: {$tone}, yaklaşık {$target
 		$data      = json_decode( $body, true );
 
 		if ( $http_code !== 200 ) {
-			$error_msg = $data['error']['message'] ?? 'API isteği başarısız';
-			throw new RuntimeException( 'OpenAI API hatası: ' . $http_code . '. ' . $error_msg );
+			$error_msg = $data['error']['message'] ?? 'API istegi basarisiz';
+			throw new RuntimeException( 'OpenAI API hatasi: ' . $http_code . '. ' . $error_msg );
 		}
 
-		$content      = $data['choices'][0]['message']['content'] ?? '';
+		$content       = $data['choices'][0]['message']['content'] ?? '';
 		$input_tokens  = $data['usage']['prompt_tokens'] ?? 0;
 		$output_tokens = $data['usage']['completion_tokens'] ?? 0;
 
@@ -436,5 +480,36 @@ Kurallar: İçerik {$lang_str} dilinde olacak, ton: {$tone}, yaklaşık {$target
 		}
 
 		return [ 'raw' => $content ];
+	}
+
+	private function limit_content_for_prompt( string $content, int $limit ): string {
+		$content = trim( $content );
+		if ( mb_strlen( $content ) <= $limit ) {
+			return $content;
+		}
+
+		return mb_substr( $content, 0, $limit ) . "\n\n[Icerik uzun oldugu icin burada kesildi; verilen bolumu butunlugunu koruyarak iyilestir.]";
+	}
+
+	private function clean_model_html( string $html ): string {
+		$html = trim( $html );
+		$html = preg_replace( '/^\s*```(?:html|HTML)?\s*/', '', $html );
+		$html = preg_replace( '/\s*```\s*$/', '', $html );
+		$html = preg_replace( '/^\s*(?:<!doctype\s+html[^>]*>|<html[^>]*>|<body[^>]*>)/i', '', $html );
+		$html = preg_replace( '/(?:<\/body>|<\/html>)\s*$/i', '', $html );
+
+		return trim( (string) $html );
+	}
+
+	private function clean_tags( array $tags ): array {
+		$clean = [];
+		foreach ( $tags as $tag ) {
+			$tag = trim( wp_strip_all_tags( (string) $tag ) );
+			if ( mb_strlen( $tag ) < 4 ) {
+				continue;
+			}
+			$clean[ mb_strtolower( $tag ) ] = $tag;
+		}
+		return array_values( $clean );
 	}
 }

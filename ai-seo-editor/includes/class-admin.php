@@ -153,7 +153,10 @@ class AISEO_Admin {
 				<button type="button" class="button aiseo-editor-optimize" data-operation="optimize_meta"><?php esc_html_e( 'Meta', 'ai-seo-editor' ); ?></button>
 				<button type="button" class="button aiseo-editor-optimize" data-operation="improve_intro"><?php esc_html_e( 'Giriş', 'ai-seo-editor' ); ?></button>
 				<button type="button" class="button aiseo-editor-optimize" data-operation="improve_readability"><?php esc_html_e( 'Okunabilirlik', 'ai-seo-editor' ); ?></button>
+				<button type="button" class="button aiseo-editor-optimize" data-operation="improve_structure"><?php esc_html_e( 'Başlıklar', 'ai-seo-editor' ); ?></button>
+				<button type="button" class="button aiseo-editor-optimize" data-operation="improve_keyword_density"><?php esc_html_e( 'Keyword', 'ai-seo-editor' ); ?></button>
 				<button type="button" class="button aiseo-editor-optimize" data-operation="add_faq"><?php esc_html_e( 'FAQ', 'ai-seo-editor' ); ?></button>
+				<button type="button" class="button aiseo-editor-optimize" data-operation="improve_conclusion"><?php esc_html_e( 'Sonuç', 'ai-seo-editor' ); ?></button>
 			</div>
 
 			<div id="aiseo-editor-notice"></div>

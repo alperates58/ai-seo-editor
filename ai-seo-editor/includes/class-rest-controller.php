@@ -217,46 +217,67 @@ class AISEO_Rest_Controller {
 
 		$this->check_token_budget();
 
-		$post      = get_post( $post_id );
-		$content   = $post instanceof WP_Post ? $post->post_content : '';
-		$title     = $post instanceof WP_Post ? $post->post_title : '';
-		$meta      = '';
-		$client    = new AISEO_OpenAI_Client( $this->settings );
-		$optimizer = new AISEO_Optimizer( $client, $this->logger );
-		$steps     = [];
+		$post    = get_post( $post_id );
+		$yoast   = new AISEO_Yoast_Integration();
+		$keyword = $yoast->get_focus_keyword( $post_id );
 
-		foreach ( [ 'optimize_title', 'optimize_meta', 'improve_readability', 'add_faq' ] as $operation ) {
-			$result = $optimizer->run( $post_id, $operation );
-			if ( empty( $result['success'] ) ) {
-				$steps[] = [
-					'operation' => $operation,
-					'success'   => false,
-					'error'     => $result['error'] ?? __( 'Öneri üretilemedi.', 'ai-seo-editor' ),
-				];
-				continue;
-			}
-
-			$field = $result['field'] ?? '';
-			$after = (string) ( $result['after'] ?? '' );
-
-			if ( 'post_title' === $field && $after !== '' ) {
-				$title = sanitize_text_field( $after );
-			} elseif ( 'meta' === $field && $after !== '' ) {
-				$meta = sanitize_textarea_field( $after );
-			} elseif ( 'post_content' === $field && $after !== '' ) {
-				$content = wp_kses_post( $after );
-			} elseif ( 'append_content' === $field && $after !== '' ) {
-				$content .= "\n\n" . wp_kses_post( $after );
-			}
-
-			$steps[] = [
-				'operation' => $operation,
-				'success'   => true,
-				'field'     => $field,
-				'before'    => $result['before'] ?? '',
-				'after'     => $after,
-			];
+		if ( empty( $keyword ) && $post instanceof WP_Post ) {
+			$keyword = $post->post_title;
 		}
+
+		if ( empty( $keyword ) ) {
+			return new WP_Error( 'aiseo_missing_param', __( 'Tam duzeltme icin baslik veya odak kelime gereklidir.', 'ai-seo-editor' ), [ 'status' => 422 ] );
+		}
+
+		$content_before = $post instanceof WP_Post ? $post->post_content : '';
+		$title_before   = $post instanceof WP_Post ? $post->post_title : '';
+		$meta_before    = $yoast->get_meta_description( $post_id );
+
+		$client = new AISEO_OpenAI_Client( $this->settings );
+		$result = $client->optimize_full_post( $post_id, $keyword, (string) $this->settings->get( 'default_tone' ) );
+
+		if ( empty( $result['content'] ) ) {
+			return new WP_Error( 'aiseo_optimize_error', __( 'Tam duzeltme onerisi uretilemedi.', 'ai-seo-editor' ), [ 'status' => 500 ] );
+		}
+
+		$title   = sanitize_text_field( $result['title'] ?? $title_before );
+		$meta    = sanitize_textarea_field( $result['meta_description'] ?? $meta_before );
+		$content = wp_kses_post( $result['content'] ?? $content_before );
+		$tags    = array_map( 'sanitize_text_field', is_array( $result['suggested_tags'] ?? null ) ? $result['suggested_tags'] : [] );
+		$tokens  = (int) ( $result['tokens_used'] ?? 0 );
+
+		$this->logger->log_ai_operation(
+			$post_id,
+			'full_optimize',
+			(string) $this->settings->get( 'openai_model' ),
+			0,
+			$tokens,
+			'success'
+		);
+
+		$steps = [
+			[
+				'operation' => 'optimize_title',
+				'success'   => true,
+				'field'     => 'post_title',
+				'before'    => $title_before,
+				'after'     => $title,
+			],
+			[
+				'operation' => 'optimize_meta',
+				'success'   => true,
+				'field'     => 'meta',
+				'before'    => $meta_before,
+				'after'     => $meta,
+			],
+			[
+				'operation' => 'full_content_optimization',
+				'success'   => true,
+				'field'     => 'post_content',
+				'before'    => $content_before,
+				'after'     => $content,
+			],
+		];
 
 		return $this->ok(
 			[
@@ -264,9 +285,10 @@ class AISEO_Rest_Controller {
 				'title'   => $title,
 				'content' => $content,
 				'meta'    => $meta,
+				'tags'    => $tags,
 				'steps'   => $steps,
 			],
-			__( 'Tam düzeltme önerisi hazır.', 'ai-seo-editor' )
+			__( 'Tam duzeltme onerisi hazir.', 'ai-seo-editor' )
 		);
 	}
 

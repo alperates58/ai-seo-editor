@@ -673,7 +673,7 @@
 				const data = editorFullSuggestionState;
 				if (data.title) applyEditorTitle(data.title);
 				if (data.content) applyEditorContent(data.content);
-				if (data.meta) localStorage.setItem('aiseo_pending_meta_' + (data.post_id || Config.postId), data.meta);
+				if (data.meta) applyEditorMeta(data.meta, data.post_id || Config.postId);
 				if (data.tags) applyEditorTags(data.tags);
 				UI.notice('aiseo-editor-notice', 'Tam düzeltme editöre aktarıldı. Kontrol edip Güncelle ile kaydedin.', 'success');
 			}
@@ -808,7 +808,7 @@
 		const okSteps = (data.steps || []).filter((step) => step.success);
 		const failedSteps = (data.steps || []).filter((step) => !step.success);
 		const tagPreview = Array.isArray(data.tags) && data.tags.length
-			? '<p class="aiseo-editor-help">Etiketler: ' + escapeHtml(data.tags.join(', ')) + '</p>'
+			? '<p class="aiseo-editor-help">Etiketler: ' + escapeHtml(cleanTagList(data.tags).join(', ')) + '</p>'
 			: '';
 		container.innerHTML = '<div class="aiseo-editor-suggestion">' +
 			'<h4>Tam Düzeltme Hazır</h4>' +
@@ -826,7 +826,7 @@
 		document.getElementById('aiseo-editor-apply-full')?.addEventListener('click', () => {
 			if (data.title) applyEditorTitle(data.title);
 			if (data.content) applyEditorContent(data.content);
-			if (data.meta) localStorage.setItem('aiseo_pending_meta_' + (data.post_id || Config.postId), data.meta);
+			if (data.meta) applyEditorMeta(data.meta, data.post_id || Config.postId);
 			if (data.tags) applyEditorTags(data.tags);
 			UI.notice('aiseo-editor-notice', 'Tam düzeltme editöre aktarıldı. Kontrol edip Güncelle ile kaydedin.', 'success');
 		});
@@ -846,8 +846,9 @@
 		} else if (field === 'post_content') {
 			applyEditorContent(after);
 		} else if (field === 'meta') {
-			localStorage.setItem('aiseo_pending_meta_' + (data.post_id || Config.postId), after);
-			window.alert('Meta önerisi hazır. Yoast/meta alanınıza yapıştırmanız için saklandı:\n\n' + after);
+			applyEditorMeta(after, data.post_id || Config.postId);
+			UI.notice('aiseo-editor-notice', 'Meta önerisi editör alanlarına aktarıldı. Alan bulunamazsa saklandı.', 'success');
+			return;
 		}
 	}
 
@@ -916,9 +917,7 @@
 	}
 
 	function applyEditorTags(tags) {
-		const cleanTags = Array.from(new Set((Array.isArray(tags) ? tags : [])
-			.map((tag) => String(tag || '').trim())
-			.filter(Boolean)));
+		const cleanTags = cleanTagList(tags);
 		if (!cleanTags.length) return;
 
 		const tagString = cleanTags.join(', ');
@@ -939,13 +938,68 @@
 	}
 
 	function replaceIntro(content, intro) {
+		const cleanIntro = stripParagraphWrapper(intro);
 		if (/<p[^>]*>.*?<\/p>/is.test(content)) {
-			return content.replace(/<p[^>]*>.*?<\/p>/is, '<p>' + escapeHtml(intro) + '</p>');
+			return content.replace(/<p[^>]*>.*?<\/p>/is, '<p>' + escapeHtml(cleanIntro) + '</p>');
 		}
-		return '<p>' + escapeHtml(intro) + '</p>\n\n' + content;
+		return '<p>' + escapeHtml(cleanIntro) + '</p>\n\n' + content;
+	}
+
+	function stripParagraphWrapper(value) {
+		const div = document.createElement('div');
+		div.innerHTML = cleanGeneratedHtml(value);
+		if (div.children.length === 1 && div.firstElementChild?.tagName?.toLowerCase() === 'p') {
+			return div.firstElementChild.textContent || '';
+		}
+		return div.textContent || String(value || '').replace(/<\/?p[^>]*>/gi, '').trim();
+	}
+
+	function applyEditorMeta(meta, postId) {
+		const value = String(meta || '').trim();
+		if (!value) return;
+
+		localStorage.setItem('aiseo_pending_meta_' + (postId || Config.postId), value);
+
+		const selectors = [
+			'#yoast_wpseo_metadesc',
+			'#_yoast_wpseo_metadesc',
+			'textarea[name="yoast_wpseo_metadesc"]',
+			'textarea[name="_yoast_wpseo_metadesc"]',
+			'#rank_math_description',
+			'textarea[name="rank_math_description"]',
+			'#aioseo-post-settings-description',
+			'textarea[name="aioseo_description"]'
+		];
+
+		let applied = false;
+		selectors.forEach((selector) => {
+			document.querySelectorAll(selector).forEach((field) => {
+				if ('value' in field) {
+					field.value = value;
+					field.dispatchEvent(new Event('input', { bubbles: true }));
+					field.dispatchEvent(new Event('change', { bubbles: true }));
+					applied = true;
+				}
+			});
+		});
+
+		if (!applied && window.wp?.data?.dispatch) {
+			const editor = window.wp.data.dispatch('core/editor');
+			if (editor?.editPost) {
+				editor.editPost({ meta: { _aiseo_meta_description: value } });
+			}
+		}
+	}
+
+	function cleanTagList(tags) {
+		return Array.from(new Set((Array.isArray(tags) ? tags : [])
+			.map((tag) => String(tag || '').replace(/[#,]/g, ' ').replace(/\s+/g, ' ').trim())
+			.filter((tag) => tag.length >= 4)
+			.slice(0, 12)));
 	}
 
 	function editorOperationLabel(operation) {
+		if (operation === 'full_content_optimization') return 'Tam Icerik Revizyonu';
 		return {
 			optimize_title: 'Başlık İyileştirme',
 			optimize_meta: 'Meta Açıklama',

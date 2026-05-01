@@ -107,6 +107,7 @@ class AISEO_Internal_Linker {
 
 		global $wpdb;
 		$content = $post->post_content;
+		$appended_links = [];
 
 		foreach ( $suggestion_ids as $id ) {
 			$id  = absint( $id );
@@ -123,18 +124,35 @@ class AISEO_Internal_Linker {
 				continue;
 			}
 
-			$anchor  = esc_html( $row['anchor_text'] );
-			$url     = esc_url( $row['target_url'] );
-			$link    = "<a href=\"{$url}\">{$anchor}</a>";
+			$target_post = get_post( (int) $row['target_post_id'] );
+			if ( ! $target_post instanceof WP_Post ) {
+				continue;
+			}
+
+			$anchor  = trim( wp_strip_all_tags( (string) $row['anchor_text'] ) );
+			$url     = get_permalink( $target_post );
+			$title   = get_the_title( $target_post );
+			$link    = '<a href="' . esc_url( $url ) . '">' . esc_html( $anchor ?: $title ) . '</a>';
 			$replaced = false;
 
-			if ( mb_stripos( $content, $row['anchor_text'] ) !== false ) {
-				$content  = preg_replace(
-					'/' . preg_quote( $row['anchor_text'], '/' ) . '/iu',
-					$link,
-					$content,
-					1
-				);
+			foreach ( $this->get_anchor_variants( $anchor, $title ) as $variant ) {
+				if ( mb_stripos( aiseo_strip_html( $content ), $variant ) === false ) {
+					continue;
+				}
+
+				$new_content = $this->replace_first_unlinked_text( $content, $variant, $link );
+				if ( $new_content !== $content ) {
+					$content  = $new_content;
+					$replaced = true;
+					break;
+				}
+			}
+
+			if ( ! $replaced ) {
+				$appended_links[ (int) $row['target_post_id'] ] = [
+					'url'    => $url,
+					'anchor' => $anchor ?: $title,
+				];
 				$replaced = true;
 			}
 
@@ -153,7 +171,53 @@ class AISEO_Internal_Linker {
 			}
 		}
 
+		if ( ! empty( $appended_links ) ) {
+			$content = $this->append_related_links_section( $content, $appended_links );
+		}
+
 		return $content;
+	}
+
+	private function get_anchor_variants( string $anchor, string $title ): array {
+		$variants = array_filter( array_unique( [
+			$anchor,
+			$title,
+			mb_strtolower( $anchor ),
+			mb_strtolower( $title ),
+		] ) );
+
+		return array_values( array_filter( $variants, fn( $variant ) => mb_strlen( trim( $variant ) ) >= 4 ) );
+	}
+
+	private function replace_first_unlinked_text( string $html, string $needle, string $replacement ): string {
+		$parts = preg_split( '/(<a\b[^>]*>.*?<\/a>)/is', $html, -1, PREG_SPLIT_DELIM_CAPTURE );
+		if ( ! is_array( $parts ) ) {
+			return $html;
+		}
+
+		foreach ( $parts as $index => $part ) {
+			if ( preg_match( '/^<a\b/i', $part ) ) {
+				continue;
+			}
+
+			$updated = preg_replace( '/' . preg_quote( $needle, '/' ) . '/iu', $replacement, $part, 1 );
+			if ( is_string( $updated ) && $updated !== $part ) {
+				$parts[ $index ] = $updated;
+				return implode( '', $parts );
+			}
+		}
+
+		return $html;
+	}
+
+	private function append_related_links_section( string $content, array $links ): string {
+		$html = "\n\n<h2>" . esc_html__( 'İlgili Hesaplama Araçları', 'ai-seo-editor' ) . "</h2>\n<ul>";
+		foreach ( $links as $link ) {
+			$html .= '<li><a href="' . esc_url( $link['url'] ) . '">' . esc_html( $link['anchor'] ) . '</a></li>';
+		}
+		$html .= '</ul>';
+
+		return rtrim( $content ) . $html;
 	}
 
 	private function save_suggestions( int $post_id, array $suggestions ): void {
