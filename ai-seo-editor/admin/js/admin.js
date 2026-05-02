@@ -8,6 +8,7 @@
 	const i18n    = Config.i18n || {};
 	const restUrl = Config.restUrl || '';
 	const nonce   = Config.nonce || '';
+	const githubNonce = Config.githubNonce || nonce;
 
 	/* ------------------------------------------------------------------ */
 	/* API Module                                                           */
@@ -1277,7 +1278,7 @@
 
 			const data = new FormData();
 			data.append('action', 'aiseo_check_github_version');
-			data.append('nonce', nonce);
+			data.append('nonce', githubNonce);
 
 			try {
 				const res = await fetch(Config.ajaxUrl, {
@@ -1292,7 +1293,7 @@
 				} catch (e) {
 					json = { success: false, data: { message: text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() } };
 				}
-				resultEl.textContent = json.data?.message || (json.success ? 'GitHub bağlantısı başarılı.' : 'GitHub sürümü okunamadı.');
+				resultEl.textContent = json.data?.message || json.message || (json.success ? 'GitHub bağlantısı başarılı.' : 'GitHub sürümü okunamadı.');
 				resultEl.className = 'aiseo-muted-inline ' + (json.success ? 'aiseo-text-success' : 'aiseo-text-error');
 			} catch (e) {
 				resultEl.textContent = 'GitHub sürümü okunamadı.';

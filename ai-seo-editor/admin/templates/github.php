@@ -3,6 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 /** @var array $settings */
+/** @var bool $has_token */
 /** @var bool $saved */
 /** @var string $update */
 /** @var string $error */
@@ -55,7 +56,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 					<tr>
 						<th><label for="aiseo-github-token"><?php esc_html_e( 'Token', 'ai-seo-editor' ); ?></label></th>
 						<td>
-							<input type="password" id="aiseo-github-token" name="token" value="<?php echo esc_attr( $settings['token'] ); ?>" class="regular-text" autocomplete="new-password" placeholder="ghp_xxxx">
+							<input type="password" id="aiseo-github-token" name="token" value="" class="regular-text" autocomplete="new-password" placeholder="<?php echo esc_attr( $has_token ? __( 'Mevcut token korunacak', 'ai-seo-editor' ) : 'ghp_xxxx' ); ?>">
 							<p class="description"><?php esc_html_e( 'Public repo için boş bırakabilirsiniz.', 'ai-seo-editor' ); ?></p>
 						</td>
 					</tr>

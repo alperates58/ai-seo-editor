@@ -208,6 +208,7 @@ class AISEO_Admin {
 		wp_localize_script( 'aiseo-admin', 'AISeoConfig', [
 			'restUrl'     => esc_url_raw( rest_url() ),
 			'nonce'       => wp_create_nonce( 'wp_rest' ),
+			'githubNonce' => wp_create_nonce( 'aiseo_github_version' ),
 			'postId'      => $post_id,
 			'currentPage' => $current_page,
 			'pluginUrl'   => AISEO_PLUGIN_URL,
@@ -330,6 +331,7 @@ class AISEO_Admin {
 
 		$updater  = new AISEO_Github_Updater();
 		$settings = $updater->get_settings();
+		$has_token = ! empty( $settings['token'] );
 		$saved    = isset( $_GET['saved'] );
 		$update   = sanitize_text_field( wp_unslash( $_GET['update'] ?? '' ) );
 		$error    = sanitize_text_field( wp_unslash( $_GET['update_error'] ?? '' ) );
@@ -338,7 +340,7 @@ class AISEO_Admin {
 
 		$this->render_template(
 			'github',
-			compact( 'settings', 'saved', 'update', 'error', 'last', 'sha' )
+			compact( 'settings', 'has_token', 'saved', 'update', 'error', 'last', 'sha' )
 		);
 	}
 
