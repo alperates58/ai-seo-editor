@@ -17,10 +17,12 @@ class AISEO_OpenAI_Client {
 		$this->max_tokens = (int) $settings->get( 'max_tokens' );
 		$provider         = (string) $settings->get( 'ai_provider' );
 		$base_url         = trim( (string) $settings->get( 'ai_base_url' ) );
+		$is_deepseek      = $provider === 'deepseek' || str_starts_with( $this->model, 'deepseek-' );
+		if ( $is_deepseek ) {
+			$this->base_url = 'https://api.deepseek.com';
+		}
 		if ( $base_url !== '' ) {
 			$this->base_url = rtrim( $base_url, '/' );
-		} elseif ( $provider === 'deepseek' ) {
-			$this->base_url = 'https://api.deepseek.com';
 		}
 	}
 

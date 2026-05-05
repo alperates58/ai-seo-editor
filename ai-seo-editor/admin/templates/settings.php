@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	<div class="aiseo-grid aiseo-grid--2">
 		<!-- OpenAI Ayarları -->
 		<div class="aiseo-card">
-			<h2 class="aiseo-card__title"><?php esc_html_e( 'OpenAI API Ayarları', 'ai-seo-editor' ); ?></h2>
+			<h2 class="aiseo-card__title"><?php esc_html_e( 'AI API Ayarları', 'ai-seo-editor' ); ?></h2>
 			<table class="form-table aiseo-settings-table">
 				<tr>
 					<th><?php esc_html_e( 'Sağlayıcı', 'ai-seo-editor' ); ?></th>
