@@ -375,7 +375,20 @@ class AISEO_OpenAI_Client {
 		$parsed   = $this->parse_json_response( $response['content'] ?? '' );
 
 		if ( empty( $parsed['content'] ) ) {
-			$parsed['error'] = 'AI yaniti JSON olarak okunamadi veya content alani bos dondu.';
+			$fallback_content = $this->extract_html_fallback( (string) ( $response['content'] ?? '' ) );
+			if ( $fallback_content !== '' ) {
+				$parsed = array_merge(
+					[
+						'title'            => $current['title'],
+						'meta_description' => $current['meta_description'],
+						'suggested_tags'    => [],
+					],
+					$parsed,
+					[ 'content' => $fallback_content ]
+				);
+			} else {
+				$parsed['error'] = 'AI yaniti JSON olarak okunamadi veya content alani bos dondu.';
+			}
 		}
 
 		if ( ! empty( $parsed['content'] ) ) {
@@ -611,6 +624,23 @@ Kurallar: Icerik {$lang_str} dilinde olacak, ton: {$tone}, yaklasik {$target_wc}
 		}
 
 		return [ 'raw' => $content ];
+	}
+
+	private function extract_html_fallback( string $content ): string {
+		$content = $this->clean_model_html( $content );
+		if ( $content === '' ) {
+			return '';
+		}
+
+		if ( preg_match( '/<(p|h2|h3|ul|ol|blockquote)\b/i', $content ) ) {
+			return $content;
+		}
+
+		if ( mb_strlen( aiseo_strip_html( $content ) ) > 600 ) {
+			return wpautop( wp_strip_all_tags( $content ) );
+		}
+
+		return '';
 	}
 
 	private function limit_content_for_prompt( string $content, int $limit ): string {
