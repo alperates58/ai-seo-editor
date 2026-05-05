@@ -363,7 +363,7 @@ class AISEO_OpenAI_Client {
 		$messages = [
 			[
 				'role'    => 'system',
-				'content' => 'Sen deneyimli bir Turkce SEO editorusun. Verilen WordPress yazisini Yoast benzeri kriterlere gore kapsamli bicimde iyilestir. JSON dondur: {"title":"...","meta_description":"...","content":"<p>...</p>","suggested_tags":["..."]}. Kurallar: baslik 50-60 karakter, meta 120-158 karakter, odak kelime baslikta/metada/ilk paragrafta/en fazla bir H2 icinde dogal gecsin. Konuyu oncelikle mevcut basliktan anla; odak kelime eksikse basligi konu kaynagi kabul et. Anahtar kelime yogunlugunu %0.8-1.8 araliginda tut; ayni kelimeyi sirf skor icin tekrar etme. Okunabilirligi dusurme: kisa cumleler, kisa paragraflar, aktif anlatim ve gecis kelimeleri kullan. Icerik 1000 kelimenin altindaysa kapsamli ama gercekci bicimde genislet, en az 2 H2 ve uygun H3 kullan. Mevcut FAQ varsa yeni FAQ ekleme; mevcut sonuc bolumu varsa ikinci sonuc bolumu ekleme. ' . $this->protected_block_instruction() . ' Mevcut gercekleri bozma, markdown fence/html/body etiketi kullanma. suggested_tags sadece mevcut etiketlerde olmayan 0-3 yeni etiket icersin; yeterli etiket varsa bos dizi dondur.',
+				'content' => 'Sen deneyimli bir Turkce SEO editorusun. Verilen WordPress yazisini Yoast benzeri kriterlere gore kapsamli bicimde iyilestir. Cevabinda analiz, aciklama, madde madde yorum, ingilizce not veya hesaplama sureci yazma. Yalnizca su formati dondur: <article data-aiseo-output="1">...temiz WordPress HTML...</article>. Kurallar: odak kelime baslikta/ilk paragrafta/en fazla bir H2 icinde dogal gecsin. Konuyu oncelikle mevcut basliktan anla; odak kelime eksikse basligi konu kaynagi kabul et. Anahtar kelime yogunlugunu %0.8-1.8 araliginda tut; ayni kelimeyi sirf skor icin tekrar etme. Okunabilirligi dusurme: kisa cumleler, kisa paragraflar, aktif anlatim ve gecis kelimeleri kullan. Icerik 1000 kelimenin altindaysa kapsamli ama gercekci bicimde genislet, en az 2 H2 ve uygun H3 kullan. Mevcut FAQ varsa yeni FAQ ekleme; mevcut sonuc bolumu varsa ikinci sonuc bolumu ekleme. ' . $this->protected_block_instruction() . ' Mevcut gercekleri bozma, markdown fence, html/body etiketi kullanma.',
 			],
 			[
 				'role'    => 'user',
@@ -373,6 +373,13 @@ class AISEO_OpenAI_Client {
 
 		$response = $this->chat_completion( $messages, min( 3800, max( 2200, $this->max_tokens ) ), 0.55, true );
 		$parsed   = $this->parse_json_response( $response['content'] ?? '' );
+		$article_content = $this->extract_article_output( (string) ( $response['content'] ?? '' ) );
+		if ( $article_content !== '' ) {
+			$parsed['content'] = $article_content;
+			$parsed['title'] = $parsed['title'] ?? $current['title'];
+			$parsed['meta_description'] = $parsed['meta_description'] ?? $current['meta_description'];
+			$parsed['suggested_tags'] = $parsed['suggested_tags'] ?? [];
+		}
 
 		if ( empty( $parsed['content'] ) ) {
 			$fallback_content = $this->extract_html_fallback( (string) ( $response['content'] ?? '' ) );
@@ -632,6 +639,10 @@ Kurallar: Icerik {$lang_str} dilinde olacak, ton: {$tone}, yaklasik {$target_wc}
 			return '';
 		}
 
+		if ( $this->looks_like_analysis_dump( $content ) ) {
+			return '';
+		}
+
 		if ( preg_match( '/<(p|h2|h3|ul|ol|blockquote)\b/i', $content ) ) {
 			return $content;
 		}
@@ -641,6 +652,38 @@ Kurallar: Icerik {$lang_str} dilinde olacak, ton: {$tone}, yaklasik {$target_wc}
 		}
 
 		return '';
+	}
+
+	private function extract_article_output( string $content ): string {
+		if ( preg_match( '/<article\b[^>]*data-aiseo-output=["\']?1["\']?[^>]*>(.*?)<\/article>/is', $content, $match ) ) {
+			return $this->clean_model_html( $match[1] );
+		}
+		if ( preg_match( '/<article\b[^>]*>(.*?)<\/article>/is', $content, $match ) && ! $this->looks_like_analysis_dump( $match[1] ) ) {
+			return $this->clean_model_html( $match[1] );
+		}
+		return '';
+	}
+
+	private function looks_like_analysis_dump( string $content ): bool {
+		$text = mb_strtolower( aiseo_strip_html( $content ) );
+		$signals = [
+			'we need to improve',
+			'yoast criteria',
+			'current content',
+			'keyword density',
+			'meta description',
+			'need to',
+			'let\'s',
+			'actually',
+			'analysis',
+		];
+		$hits = 0;
+		foreach ( $signals as $signal ) {
+			if ( str_contains( $text, $signal ) ) {
+				$hits++;
+			}
+		}
+		return $hits >= 3;
 	}
 
 	private function limit_content_for_prompt( string $content, int $limit ): string {
