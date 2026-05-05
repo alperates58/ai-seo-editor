@@ -35,6 +35,8 @@
 		getAnalysis:      (pid)        => API.request('/analyze/' + pid),
 		optimize:         (pid, op)    => API.request('/optimize', 'POST', { post_id: pid, operation: op }),
 		fullOptimize:     (pid)        => API.request('/optimize/full', 'POST', { post_id: pid }),
+		agentOptimize:    (data)       => API.request('/agent/optimize', 'POST', data),
+		agentApply:       (data)       => API.request('/agent/apply', 'POST', data),
 		regeneratePost:   (pid)        => API.request('/regenerate/' + pid, 'POST'),
 		applyOptimize:    (data)       => API.request('/optimize/apply', 'POST', data),
 		bulkAnalyze:      (ids)        => API.request('/bulk-analyze', 'POST', { post_ids: ids }),
@@ -748,6 +750,134 @@
 		});
 	}
 
+	/* ------------------------------------------------------------------ */
+	/* Agent Optimizer                                                     */
+	/* ------------------------------------------------------------------ */
+	const agentProposals = new Map();
+
+	function initAgentOptimizer() {
+		const startBtn = document.getElementById('aiseo-agent-start');
+		const selectAll = document.getElementById('aiseo-agent-select-all');
+		const selectAllHeader = document.getElementById('aiseo-agent-select-all-header');
+		if (!startBtn) return;
+
+		const toggleAll = (checked) => {
+			document.querySelectorAll('.aiseo-agent-select').forEach((cb) => {
+				cb.checked = checked;
+			});
+		};
+		if (selectAll) selectAll.addEventListener('change', () => toggleAll(selectAll.checked));
+		if (selectAllHeader) selectAllHeader.addEventListener('change', () => toggleAll(selectAllHeader.checked));
+
+		startBtn.addEventListener('click', async () => {
+			const selected = Array.from(document.querySelectorAll('.aiseo-agent-select:checked'))
+				.map((cb) => parseInt(cb.value))
+				.filter((id) => Number.isFinite(id) && id > 0);
+			if (!selected.length) {
+				UI.notice('aiseo-agent-notice', 'En az bir yazı seçin.', 'warning');
+				return;
+			}
+
+			const targetSeo = parseInt(document.getElementById('aiseo-agent-target-seo')?.value) || 80;
+			const targetRead = parseInt(document.getElementById('aiseo-agent-target-read')?.value) || 75;
+			const progressWrap = document.getElementById('aiseo-agent-progress-wrap');
+			const progressBar = document.getElementById('aiseo-agent-progress');
+			const statusEl = document.getElementById('aiseo-agent-status');
+
+			UI.loading(startBtn, true);
+			UI.spin(progressWrap, true);
+			let done = 0;
+			let ready = 0;
+			let skipped = 0;
+			let failed = 0;
+
+			for (const postId of selected) {
+				const row = document.querySelector('#aiseo-agent-table tr[data-post-id="' + postId + '"]');
+				setAgentState(row, 'Analiz ediliyor...');
+				try {
+					const res = await API.agentOptimize({
+						post_id: postId,
+						target_seo: targetSeo,
+						target_readability: targetRead,
+					});
+					const data = res.data || {};
+					if (data.skipped) {
+						skipped++;
+						setAgentState(row, data.reason || 'Hedefte');
+					} else {
+						ready++;
+						agentProposals.set(postId, data);
+						setAgentState(row, 'Öneri hazır');
+						renderAgentAction(row, postId);
+					}
+					if (data.before) updateAgentScores(row, data.before.seo_score, data.before.readability_score);
+				} catch (e) {
+					failed++;
+					setAgentState(row, e.message || 'Hata');
+				}
+				done++;
+				const pct = Math.round((done / selected.length) * 100);
+				if (progressBar) progressBar.style.width = pct + '%';
+				if (statusEl) statusEl.textContent = done + ' / ' + selected.length;
+			}
+
+			UI.loading(startBtn, false);
+			UI.notice('aiseo-agent-notice', 'Agent tamamlandı. Hazır: ' + ready + ', hedefte: ' + skipped + ', hata: ' + failed + '.', failed ? 'warning' : 'success');
+		});
+
+		document.addEventListener('click', async (event) => {
+			const btn = event.target.closest('.aiseo-agent-apply');
+			if (!btn) return;
+			event.preventDefault();
+			const postId = parseInt(btn.dataset.postId);
+			const proposal = agentProposals.get(postId);
+			if (!proposal) return;
+			if (!confirm('Bu DeepSeek önerisi yazıya uygulansın mı? Uygulama öncesinde revision oluşturulur.')) return;
+
+			const row = btn.closest('tr');
+			UI.loading(btn, true);
+			setAgentState(row, 'Uygulanıyor...');
+			try {
+				const res = await API.agentApply({
+					post_id: postId,
+					title: proposal.title || '',
+					content: proposal.content || '',
+					meta: proposal.meta || '',
+					tags: proposal.tags || [],
+				});
+				const after = res.data?.after || {};
+				updateAgentScores(row, after.seo_score || 0, after.readability_score || 0);
+				setAgentState(row, 'Uygulandı');
+				btn.remove();
+				UI.notice('aiseo-agent-notice', 'Öneri uygulandı ve yazı yeniden analiz edildi.', 'success');
+			} catch (e) {
+				setAgentState(row, e.message || 'Uygulama hatası');
+				UI.notice('aiseo-agent-notice', e.message || i18n.error, 'error');
+			} finally {
+				UI.loading(btn, false);
+			}
+		});
+	}
+
+	function setAgentState(row, text) {
+		const cell = row?.querySelector('.aiseo-agent-state');
+		if (cell) cell.textContent = text || '';
+	}
+
+	function renderAgentAction(row, postId) {
+		const cell = row?.querySelector('.aiseo-agent-action');
+		if (!cell) return;
+		const edit = cell.querySelector('a')?.outerHTML || '';
+		cell.innerHTML = '<button type="button" class="button button-primary button-small aiseo-agent-apply" data-post-id="' + String(postId) + '">Uygula</button> ' + edit;
+	}
+
+	function updateAgentScores(row, seo, read) {
+		const seoCell = row?.querySelector('.aiseo-agent-seo');
+		const readCell = row?.querySelector('.aiseo-agent-read');
+		if (seoCell) seoCell.innerHTML = scoreBadge(seo || 0);
+		if (readCell) readCell.innerHTML = scoreBadge(read || 0);
+	}
+
 	function renderEditorInternalLinks(container, suggestions) {
 		if (!container) return;
 		const count = (suggestions || []).length;
@@ -1327,6 +1457,9 @@
 		}
 		if (page === 'aiseo-bulk') {
 			initBulkAnalysis();
+		}
+		if (page === 'aiseo-agent') {
+			initAgentOptimizer();
 		}
 		if (page === 'aiseo-generator') {
 			initArticleGenerator();

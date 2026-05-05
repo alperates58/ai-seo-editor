@@ -47,6 +47,18 @@ class AISEO_Rest_Controller {
 			'permission_callback' => [ $this, 'check_permissions' ],
 		] );
 
+		register_rest_route( self::NAMESPACE, '/agent/optimize', [
+			'methods'             => WP_REST_Server::CREATABLE,
+			'callback'            => [ $this, 'run_agent_optimize' ],
+			'permission_callback' => [ $this, 'check_permissions' ],
+		] );
+
+		register_rest_route( self::NAMESPACE, '/agent/apply', [
+			'methods'             => WP_REST_Server::CREATABLE,
+			'callback'            => [ $this, 'apply_agent_optimization' ],
+			'permission_callback' => [ $this, 'check_permissions' ],
+		] );
+
 		register_rest_route( self::NAMESPACE, '/regenerate/(?P<post_id>\d+)', [
 			'methods'             => WP_REST_Server::CREATABLE,
 			'callback'            => [ $this, 'regenerate_post' ],
@@ -296,6 +308,112 @@ class AISEO_Rest_Controller {
 				'steps'   => $steps,
 			],
 			__( 'Tam duzeltme onerisi hazir.', 'ai-seo-editor' )
+		);
+	}
+
+	public function run_agent_optimize( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+		$post_id     = absint( $request->get_param( 'post_id' ) );
+		$target_seo  = max( 1, min( 100, absint( $request->get_param( 'target_seo' ) ?? 80 ) ) );
+		$target_read = max( 1, min( 100, absint( $request->get_param( 'target_readability' ) ?? 75 ) ) );
+
+		if ( ! $this->post_exists( $post_id ) ) {
+			return $this->not_found();
+		}
+
+		$analyzer = new AISEO_Analyzer();
+		$before   = $analyzer->analyze( $post_id, true );
+		if ( isset( $before['error'] ) ) {
+			return new WP_Error( 'aiseo_analysis_error', $before['error'], [ 'status' => 500 ] );
+		}
+
+		$seo_score  = (int) ( $before['seo_score'] ?? 0 );
+		$read_score = (int) ( $before['readability_score'] ?? 0 );
+
+		if ( $seo_score >= $target_seo && $read_score >= $target_read ) {
+			return $this->ok(
+				[
+					'post_id' => $post_id,
+					'skipped' => true,
+					'reason'  => __( 'Yazı hedef skorların üzerinde.', 'ai-seo-editor' ),
+					'before'  => [
+						'seo_score'         => $seo_score,
+						'readability_score' => $read_score,
+					],
+				],
+				__( 'İyileştirme gerekmiyor.', 'ai-seo-editor' )
+			);
+		}
+
+		$this->check_token_budget();
+
+		$proposal = $this->build_full_optimization_proposal( $post_id );
+		if ( is_wp_error( $proposal ) ) {
+			return $proposal;
+		}
+
+		$proposal['before'] = [
+			'seo_score'         => $seo_score,
+			'readability_score' => $read_score,
+		];
+		$proposal['targets'] = [
+			'seo_score'         => $target_seo,
+			'readability_score' => $target_read,
+		];
+
+		return $this->ok( $proposal, __( 'Agent önerisi hazır.', 'ai-seo-editor' ) );
+	}
+
+	public function apply_agent_optimization( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+		$post_id = absint( $request->get_param( 'post_id' ) );
+		if ( ! $this->post_exists( $post_id ) ) {
+			return $this->not_found();
+		}
+
+		$title   = sanitize_text_field( $request->get_param( 'title' ) ?? '' );
+		$content = wp_kses_post( $request->get_param( 'content' ) ?? '' );
+		$meta    = sanitize_textarea_field( $request->get_param( 'meta' ) ?? '' );
+		$tags    = array_map( 'sanitize_text_field', (array) ( $request->get_param( 'tags' ) ?? [] ) );
+
+		if ( empty( $title ) || empty( $content ) ) {
+			return new WP_Error( 'aiseo_missing_param', __( 'Başlık ve içerik gereklidir.', 'ai-seo-editor' ), [ 'status' => 422 ] );
+		}
+
+		$post = get_post( $post_id );
+		if ( $post instanceof WP_Post && post_type_supports( $post->post_type, 'revisions' ) ) {
+			wp_save_post_revision( $post_id );
+		}
+
+		$updated = wp_update_post( [
+			'ID'           => $post_id,
+			'post_title'   => $title,
+			'post_content' => $content,
+		], true );
+
+		if ( is_wp_error( $updated ) ) {
+			return new WP_Error( 'aiseo_apply_error', $updated->get_error_message(), [ 'status' => 500 ] );
+		}
+
+		if ( $meta !== '' ) {
+			update_post_meta( $post_id, '_aiseo_meta_description', $meta );
+			( new AISEO_Yoast_Integration() )->set_meta_description( $post_id, $meta );
+		}
+
+		if ( ! empty( $tags ) ) {
+			wp_set_post_tags( $post_id, $this->clean_tag_list( $tags, 8 ), false );
+		}
+
+		$this->logger->invalidate_cache( $post_id );
+		$after = ( new AISEO_Analyzer() )->analyze( $post_id, true );
+
+		return $this->ok(
+			[
+				'post_id' => $post_id,
+				'after'   => [
+					'seo_score'         => (int) ( $after['seo_score'] ?? 0 ),
+					'readability_score' => (int) ( $after['readability_score'] ?? 0 ),
+				],
+			],
+			__( 'Agent önerisi uygulandı ve yeniden analiz edildi.', 'ai-seo-editor' )
 		);
 	}
 
@@ -642,6 +760,77 @@ class AISEO_Rest_Controller {
 
 	private function not_found(): WP_Error {
 		return new WP_Error( 'aiseo_not_found', __( 'Yazı bulunamadı.', 'ai-seo-editor' ), [ 'status' => 404 ] );
+	}
+
+	private function build_full_optimization_proposal( int $post_id ): array|WP_Error {
+		$post = get_post( $post_id );
+		if ( ! $post instanceof WP_Post ) {
+			return $this->not_found();
+		}
+
+		$yoast   = new AISEO_Yoast_Integration();
+		$keyword = $yoast->get_focus_keyword( $post_id );
+		if ( empty( $keyword ) ) {
+			$keyword = $post->post_title;
+		}
+		if ( empty( $keyword ) ) {
+			return new WP_Error( 'aiseo_missing_param', __( 'Tam düzeltme için başlık veya odak kelime gereklidir.', 'ai-seo-editor' ), [ 'status' => 422 ] );
+		}
+
+		$content_before = $post->post_content;
+		$title_before   = $post->post_title;
+		$meta_before    = $yoast->get_meta_description( $post_id );
+
+		$client = new AISEO_OpenAI_Client( $this->settings );
+		$result = $client->optimize_full_post( $post_id, $keyword, (string) $this->settings->get( 'default_tone' ) );
+
+		if ( empty( $result['content'] ) ) {
+			return new WP_Error( 'aiseo_optimize_error', __( 'Tam düzeltme önerisi üretilemedi.', 'ai-seo-editor' ), [ 'status' => 500 ] );
+		}
+
+		$title   = sanitize_text_field( $result['title'] ?? $title_before );
+		$meta    = sanitize_textarea_field( $result['meta_description'] ?? $meta_before );
+		$content = wp_kses_post( $result['content'] ?? $content_before );
+		$tags    = array_map( 'sanitize_text_field', is_array( $result['suggested_tags'] ?? null ) ? $result['suggested_tags'] : [] );
+		$tags    = $this->filter_new_tags( $post_id, $tags, 3 );
+		$tokens  = (int) ( $result['tokens_used'] ?? 0 );
+
+		$this->logger->log_ai_operation(
+			$post_id,
+			'agent_full_optimize',
+			(string) $this->settings->get( 'openai_model' ),
+			0,
+			$tokens,
+			'success'
+		);
+
+		return [
+			'post_id' => $post_id,
+			'title'   => $title,
+			'content' => $content,
+			'meta'    => $meta,
+			'tags'    => $tags,
+			'steps'   => [
+				[
+					'operation' => 'optimize_title',
+					'success'   => true,
+					'before'    => $title_before,
+					'after'     => $title,
+				],
+				[
+					'operation' => 'optimize_meta',
+					'success'   => true,
+					'before'    => $meta_before,
+					'after'     => $meta,
+				],
+				[
+					'operation' => 'full_content_optimization',
+					'success'   => true,
+					'before'    => $content_before,
+					'after'     => $content,
+				],
+			],
+		];
 	}
 
 	public function optimize_tags( WP_REST_Request $request ): WP_REST_Response|WP_Error {

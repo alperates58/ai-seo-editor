@@ -65,6 +65,15 @@ class AISEO_Admin {
 
 		add_submenu_page(
 			$this->menu_slug,
+			__( 'Otomatik İyileştirme', 'ai-seo-editor' ),
+			__( 'Otomatik İyileştirme', 'ai-seo-editor' ),
+			'manage_options',
+			'aiseo-agent',
+			[ $this, 'page_agent_optimizer' ]
+		);
+
+		add_submenu_page(
+			$this->menu_slug,
 			__( 'AI Makale Yaz', 'ai-seo-editor' ),
 			__( 'AI Makale Yaz', 'ai-seo-editor' ),
 			'manage_options',
@@ -172,6 +181,7 @@ class AISEO_Admin {
 			'toplevel_page_aiseo-dashboard',
 			'ai-seo-editor_page_aiseo-posts',
 			'ai-seo-editor_page_aiseo-bulk',
+			'ai-seo-editor_page_aiseo-agent',
 			'ai-seo-editor_page_aiseo-generator',
 			'ai-seo-editor_page_aiseo-links',
 			'ai-seo-editor_page_aiseo-settings',
@@ -299,6 +309,22 @@ class AISEO_Admin {
 		$categories = get_categories( [ 'hide_empty' => false ] );
 		$settings   = $this->settings;
 		$this->render_template( 'article-generator', compact( 'categories', 'settings' ) );
+	}
+
+	public function page_agent_optimizer(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Yetkiniz yok.', 'ai-seo-editor' ) );
+		}
+
+		$posts = get_posts( [
+			'post_type'      => 'post',
+			'post_status'    => 'publish',
+			'posts_per_page' => 100,
+			'orderby'        => 'date',
+			'order'          => 'DESC',
+		] );
+
+		$this->render_template( 'agent-optimizer', compact( 'posts' ) );
 	}
 
 	public function page_internal_links(): void {
