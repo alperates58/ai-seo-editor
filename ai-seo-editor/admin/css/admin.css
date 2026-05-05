@@ -854,6 +854,11 @@
 	color: var(--aiseo-green, #10b981);
 }
 
+.aiseo-editor-step-list .is-warn {
+	background: rgba(251,191,36,.14);
+	color: #b45309;
+}
+
 .aiseo-editor-step-list .is-error {
 	background: var(--aiseo-red-soft, rgba(248,113,113,.16));
 	color: var(--aiseo-red, #f87171);

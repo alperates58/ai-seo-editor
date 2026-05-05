@@ -147,9 +147,7 @@ class AISEO_Admin {
 					<strong id="aiseo-editor-read-score"><?php echo esc_html( $read_score > 0 ? $read_score : '—' ); ?></strong>
 				</div>
 			</div>
-			<?php if ( $last ) : ?>
-				<p class="aiseo-editor-last"><?php echo esc_html( sprintf( __( 'Son analiz: %s önce', 'ai-seo-editor' ), human_time_diff( strtotime( $last ) ) ) ); ?></p>
-			<?php endif; ?>
+			<p id="aiseo-editor-last" class="aiseo-editor-last"><?php echo $last ? esc_html( sprintf( __( 'Son analiz: %s önce', 'ai-seo-editor' ), human_time_diff( strtotime( $last ) ) ) ) : ''; ?></p>
 
 			<div class="aiseo-editor-actions">
 				<button type="button" class="button button-secondary" id="aiseo-editor-analyze"><?php esc_html_e( 'Analiz Et', 'ai-seo-editor' ); ?></button>

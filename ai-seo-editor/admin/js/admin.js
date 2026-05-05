@@ -603,9 +603,12 @@
 					const data = res.data || {};
 					const seoScore = document.getElementById('aiseo-editor-seo-score');
 					const readScore = document.getElementById('aiseo-editor-read-score');
+					const lastEl = document.getElementById('aiseo-editor-last');
 					if (seoScore) seoScore.textContent = data.seo_score || '—';
 					if (readScore) readScore.textContent = data.readability_score || '—';
-					UI.notice('aiseo-editor-notice', 'Analiz yenilendi.', 'success');
+					if (lastEl) lastEl.textContent = 'Son analiz: Az önce';
+					renderAnalysisSummary(preview, data);
+					UI.notice('aiseo-editor-notice', 'Analiz tamamlandı. SEO: ' + (data.seo_score || '—') + ', Okunabilirlik: ' + (data.readability_score || '—'), 'success');
 				} catch (e) {
 					UI.notice('aiseo-editor-notice', e.message || i18n.error, 'error');
 				} finally {
@@ -1018,6 +1021,24 @@
 
 	function diffTokens(value) {
 		return String(value || '').split(/(\s+|<[^>]+>|[.,;:!?()[\]{}])/g).filter((token) => token !== '');
+	}
+
+	function renderAnalysisSummary(container, data) {
+		if (!container) return;
+		const criteria = [...(data.seo_criteria || []), ...(data.readability_criteria || [])];
+		if (!criteria.length) return;
+		const errors   = criteria.filter((c) => c.status === 'error').length;
+		const warnings = criteria.filter((c) => c.status === 'warning').length;
+		const good     = criteria.filter((c) => c.status === 'good').length;
+		const rows = criteria.map((c) => {
+			const cls = c.status === 'good' ? 'is-ok' : c.status === 'warning' ? 'is-warn' : 'is-error';
+			return '<li class="' + cls + '">' + escapeHtml(c.label + ': ' + c.message) + '</li>';
+		}).join('');
+		container.innerHTML = '<div class="aiseo-editor-suggestion">' +
+			'<h4>Analiz Sonuçları</h4>' +
+			'<p class="aiseo-editor-help">✓ ' + good + ' iyi &nbsp; △ ' + warnings + ' uyarı &nbsp; ✗ ' + errors + ' hata</p>' +
+			'<ul class="aiseo-editor-step-list">' + rows + '</ul>' +
+			'</div>';
 	}
 
 	function renderEditorSuggestion(container, data) {
