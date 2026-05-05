@@ -335,6 +335,7 @@ class AISEO_Rest_Controller {
 		$client    = new AISEO_OpenAI_Client( $this->settings );
 		$generator = new AISEO_Article_Generator( $client, $this->logger );
 		$result    = $generator->generate( $params );
+		$new_content = $this->preserve_bracket_blocks( $content, (string) ( $result['content'] ?? '' ) );
 
 		if ( empty( $result['success'] ) ) {
 			return new WP_Error( 'aiseo_regenerate_error', $result['error'] ?? __( 'Makale baÅŸtan oluÅŸturulamadÄ±.', 'ai-seo-editor' ), [ 'status' => 500 ] );
@@ -344,7 +345,7 @@ class AISEO_Rest_Controller {
 			[
 				'post_id' => $post_id,
 				'title'   => $result['title'] ?? $title,
-				'content' => $result['content'] ?? '',
+				'content' => $new_content,
 				'meta'    => $result['meta_description'] ?? '',
 				'tags'    => $result['suggested_tags'] ?? [],
 			],
@@ -609,6 +610,25 @@ class AISEO_Rest_Controller {
 			'data'    => $data,
 			'message' => $message,
 		], 200 );
+	}
+
+	private function preserve_bracket_blocks( string $source, string $target ): string {
+		if ( ! preg_match_all( '/\[[^\[\]\r\n]{1,800}\]/u', $source, $matches ) ) {
+			return $target;
+		}
+
+		$missing = [];
+		foreach ( array_unique( $matches[0] ) as $block ) {
+			if ( strpos( $target, $block ) === false ) {
+				$missing[] = $block;
+			}
+		}
+
+		if ( empty( $missing ) ) {
+			return $target;
+		}
+
+		return implode( "\n\n", $missing ) . "\n\n" . $target;
 	}
 
 	private function not_found(): WP_Error {

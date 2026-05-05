@@ -1244,8 +1244,10 @@
 		const chk = (id) => get(id)?.checked ? 1 : 0;
 
 		const raw = {
+			ai_provider:         document.getElementById('aiseo-provider')?.value          || 'openai',
 			openai_api_key:      document.getElementById('aiseo-api-key')?.value?.trim() || '',
 			openai_model:        document.getElementById('aiseo-model')?.value            || '',
+			ai_base_url:         document.getElementById('aiseo-base-url')?.value?.trim() || '',
 			quality_mode:        document.getElementById('aiseo-quality-mode')?.value     || 'balanced',
 			max_tokens:          parseInt(val('max_tokens'))          || 2000,
 			monthly_token_limit: parseInt(val('monthly_token_limit')) || 500000,

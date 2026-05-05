@@ -6,8 +6,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 class AISEO_Settings {
 
 	private array $defaults = [
+		'ai_provider'         => 'openai',
 		'openai_api_key'      => '',
 		'openai_model'        => 'gpt-4o-mini',
+		'ai_base_url'         => '',
 		'quality_mode'        => 'balanced',
 		'max_tokens'          => 2000,
 		'default_language'    => 'tr',
@@ -117,6 +119,17 @@ class AISEO_Settings {
 				: 'gpt-4o-mini';
 		}
 
+		if ( isset( $input['ai_provider'] ) ) {
+			$allowed_provider      = [ 'openai', 'deepseek' ];
+			$clean['ai_provider'] = in_array( $input['ai_provider'], $allowed_provider, true )
+				? $input['ai_provider']
+				: 'openai';
+		}
+
+		if ( isset( $input['ai_base_url'] ) ) {
+			$clean['ai_base_url'] = esc_url_raw( trim( (string) $input['ai_base_url'] ) );
+		}
+
 		if ( isset( $input['quality_mode'] ) ) {
 			$allowed               = [ 'fast', 'balanced', 'quality' ];
 			$clean['quality_mode'] = in_array( $input['quality_mode'], $allowed, true )
@@ -166,6 +179,8 @@ class AISEO_Settings {
 			'gpt-4o'         => 'GPT-4o (Dengeli)',
 			'gpt-4-turbo'    => 'GPT-4 Turbo (Premium)',
 			'gpt-3.5-turbo'  => 'GPT-3.5 Turbo (Hızlı)',
+			'deepseek-chat'  => 'DeepSeek Chat',
+			'deepseek-reasoner' => 'DeepSeek Reasoner',
 		];
 	}
 

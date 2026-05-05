@@ -127,8 +127,10 @@ class AISEO_Activator {
 			update_option(
 				AISEO_OPTION_SETTINGS,
 				[
+					'ai_provider'          => 'openai',
 					'openai_api_key'       => '',
 					'openai_model'         => 'gpt-4o-mini',
+					'ai_base_url'          => '',
 					'quality_mode'         => 'balanced',
 					'max_tokens'           => 2000,
 					'default_language'     => 'tr',

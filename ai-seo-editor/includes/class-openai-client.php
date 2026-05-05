@@ -15,6 +15,13 @@ class AISEO_OpenAI_Client {
 		$this->api_key    = $settings->get_api_key();
 		$this->model      = $settings->get( 'openai_model' );
 		$this->max_tokens = (int) $settings->get( 'max_tokens' );
+		$provider         = (string) $settings->get( 'ai_provider' );
+		$base_url         = trim( (string) $settings->get( 'ai_base_url' ) );
+		if ( $base_url !== '' ) {
+			$this->base_url = rtrim( $base_url, '/' );
+		} elseif ( $provider === 'deepseek' ) {
+			$this->base_url = 'https://api.deepseek.com';
+		}
 	}
 
 	public function chat_completion(
@@ -24,7 +31,7 @@ class AISEO_OpenAI_Client {
 		bool $json_mode    = false
 	): array {
 		if ( empty( $this->api_key ) ) {
-			throw new RuntimeException( 'OpenAI API anahtari tanimlanmamis.' );
+			throw new RuntimeException( 'AI API anahtari tanimlanmamis.' );
 		}
 
 		$payload = [
@@ -118,22 +125,23 @@ class AISEO_OpenAI_Client {
 	public function improve_structure( int $post_id, string $keyword ): array {
 		$post    = get_post( $post_id );
 		$content = $post->post_content ?? '';
+		$locked  = $this->protect_bracket_blocks( $content );
 
 		$messages = [
 			[
 				'role'    => 'system',
-				'content' => 'Sen bir SEO icerik editorusun. WordPress HTML icerigini koruyarak H2/H3 yapisini iyilestir. En az 2 anlamli H2 kullan, uygun yerlerde H3 ekle, en az bir H2 icinde odak kelimeyi dogal bicimde gecir. Mevcut gercekleri koru. YALNIZCA temiz WordPress HTML dondur; aciklama, markdown fence, html/body etiketi ekleme.',
+				'content' => 'Sen bir SEO icerik editorusun. WordPress HTML icerigini koruyarak H2/H3 yapisini iyilestir. En az 2 anlamli H2 kullan, uygun yerlerde H3 ekle, en az bir H2 icinde odak kelimeyi dogal bicimde gecir. Mevcut gercekleri koru. ' . $this->protected_block_instruction() . ' YALNIZCA temiz WordPress HTML dondur; aciklama, markdown fence, html/body etiketi ekleme.',
 			],
 			[
 				'role'    => 'user',
-				'content' => "Odak kelime: {$keyword}\nIcerik:\n" . $this->limit_content_for_prompt( $content, 12000 ),
+				'content' => "Konu basligi: " . get_the_title( $post_id ) . "\nOdak kelime: {$keyword}\nIcerik:\n" . $this->limit_content_for_prompt( $locked['content'], 12000 ),
 			],
 		];
 
 		$response = $this->chat_completion( $messages, 2800, 0.55 );
 		return [
 			'before' => $content,
-			'after'  => $this->clean_model_html( $response['content'] ?? '' ),
+			'after'  => $this->restore_bracket_blocks( $this->clean_model_html( $response['content'] ?? '' ), $locked['blocks'] ),
 			'field'  => 'post_content',
 		];
 	}
@@ -141,6 +149,7 @@ class AISEO_OpenAI_Client {
 	public function improve_readability( int $post_id, string $tone, string $keyword = '' ): array {
 		$post    = get_post( $post_id );
 		$content = $post->post_content ?? '';
+		$locked  = $this->protect_bracket_blocks( $content );
 		$density = $keyword ? aiseo_keyword_density( $content, $keyword ) : 0;
 		$keyword_note = $keyword
 			? " Odak kelime: \"{$keyword}\". Bu kelimeyi ve mevcut SEO sinyallerini koru; baslik, ilk paragraf veya H2 icinde zaten dogal geciyorsa yerini bozma. Anahtar kelimeyi gereksiz tekrar etme; mevcut yogunluk %{$density}, hedef aralik %0.8-1.8."
@@ -149,18 +158,18 @@ class AISEO_OpenAI_Client {
 		$messages = [
 			[
 				'role'    => 'system',
-				'content' => "Sen bir okunabilirlik editorusun. Verilen WordPress HTML icerigini bastan sona duzenle: cumleleri kisalt, uzun paragraflari bol, aktif anlatim kullan, gecis kelimeleri ekle, H2/H3 yapisini ve tum gercekleri koru. Ton: {$tone}.{$keyword_note} Icerigi kisaltma; kapsam zayifsa yalnizca dogal ornekler ve aciklayici paragraflar ekle. Yeni FAQ, yeni sonuc bolumu veya tekrar eden anahtar kelime listeleri ekleme. YALNIZCA temiz WordPress HTML dondur.",
+				'content' => "Sen bir okunabilirlik editorusun. Verilen WordPress HTML icerigini bastan sona duzenle: cumleleri kisalt, uzun paragraflari bol, aktif anlatim kullan, gecis kelimeleri ekle, H2/H3 yapisini ve tum gercekleri koru. Ton: {$tone}.{$keyword_note} Icerigi kisaltma; kapsam zayifsa yalnizca dogal ornekler ve aciklayici paragraflar ekle. Yeni FAQ, yeni sonuc bolumu veya tekrar eden anahtar kelime listeleri ekleme. " . $this->protected_block_instruction() . " YALNIZCA temiz WordPress HTML dondur.",
 			],
 			[
 				'role'    => 'user',
-				'content' => "Ton: {$tone}\nIcerik:\n" . $this->limit_content_for_prompt( $content, 14000 ),
+				'content' => "Konu basligi: " . get_the_title( $post_id ) . "\nTon: {$tone}\nIcerik:\n" . $this->limit_content_for_prompt( $locked['content'], 14000 ),
 			],
 		];
 
 		$response = $this->chat_completion( $messages, 3800, 0.55 );
 		return [
 			'before' => $content,
-			'after'  => $this->clean_model_html( $response['content'] ?? '' ),
+			'after'  => $this->restore_bracket_blocks( $this->clean_model_html( $response['content'] ?? '' ), $locked['blocks'] ),
 			'field'  => 'post_content',
 		];
 	}
@@ -205,6 +214,7 @@ class AISEO_OpenAI_Client {
 	public function improve_keyword_density( int $post_id, string $keyword ): array {
 		$post    = get_post( $post_id );
 		$content = $post->post_content ?? '';
+		$locked  = $this->protect_bracket_blocks( $content );
 		$density = aiseo_keyword_density( $content, $keyword );
 
 		$instruction = $density > 2.5
@@ -214,18 +224,18 @@ class AISEO_OpenAI_Client {
 		$messages = [
 			[
 				'role'    => 'system',
-				'content' => "Sen bir SEO icerik editorusun. {$instruction} Icerigin tamamini WordPress HTML olarak yeniden duzenle. Odak kelimeyi yalnizca gerekli yerlerde kullan: ilk paragraf ve en fazla bir H2 yeterlidir. Yeni FAQ, sonuc bolumu veya anahtar kelime listesi ekleme. Gercekleri koru, gerekirse kisa aciklayici eklemeler yap. YALNIZCA temiz WordPress HTML dondur.",
+				'content' => "Sen bir SEO icerik editorusun. {$instruction} Icerigin tamamini WordPress HTML olarak yeniden duzenle. Odak kelimeyi yalnizca gerekli yerlerde kullan: ilk paragraf ve en fazla bir H2 yeterlidir. Yeni FAQ, sonuc bolumu veya anahtar kelime listesi ekleme. Gercekleri koru, gerekirse kisa aciklayici eklemeler yap. " . $this->protected_block_instruction() . " YALNIZCA temiz WordPress HTML dondur.",
 			],
 			[
 				'role'    => 'user',
-				'content' => "Odak kelime: {$keyword}\nMevcut yogunluk: %{$density}\nIcerik:\n" . $this->limit_content_for_prompt( $content, 14000 ),
+				'content' => "Konu basligi: " . get_the_title( $post_id ) . "\nOdak kelime: {$keyword}\nMevcut yogunluk: %{$density}\nIcerik:\n" . $this->limit_content_for_prompt( $locked['content'], 14000 ),
 			],
 		];
 
 		$response = $this->chat_completion( $messages, 3800, 0.55 );
 		return [
 			'before' => $post->post_content ?? '',
-			'after'  => $this->clean_model_html( $response['content'] ?? '' ),
+			'after'  => $this->restore_bracket_blocks( $this->clean_model_html( $response['content'] ?? '' ), $locked['blocks'] ),
 			'field'  => 'post_content',
 		];
 	}
@@ -336,6 +346,7 @@ class AISEO_OpenAI_Client {
 
 		$yoast   = new AISEO_Yoast_Integration();
 		$content = $post->post_content ?? '';
+		$locked  = $this->protect_bracket_blocks( $content );
 		$current = [
 			'title'            => get_the_title( $post_id ),
 			'meta_description' => $yoast->get_meta_description( $post_id ),
@@ -349,11 +360,11 @@ class AISEO_OpenAI_Client {
 		$messages = [
 			[
 				'role'    => 'system',
-				'content' => 'Sen deneyimli bir Turkce SEO editorusun. Verilen WordPress yazisini Yoast benzeri kriterlere gore kapsamli bicimde iyilestir. JSON dondur: {"title":"...","meta_description":"...","content":"<p>...</p>","suggested_tags":["..."]}. Kurallar: baslik 50-60 karakter, meta 120-158 karakter, odak kelime baslikta/metada/ilk paragrafta/en fazla bir H2 icinde dogal gecsin. Anahtar kelime yogunlugunu %0.8-1.8 araliginda tut; ayni kelimeyi sirf skor icin tekrar etme. Okunabilirligi dusurme: kisa cumleler, kisa paragraflar, aktif anlatim ve gecis kelimeleri kullan. Icerik 1000 kelimenin altindaysa kapsamli ama gercekci bicimde genislet, en az 2 H2 ve uygun H3 kullan. Mevcut FAQ varsa yeni FAQ ekleme; mevcut sonuc bolumu varsa ikinci sonuc bolumu ekleme. Mevcut gercekleri bozma, markdown fence/html/body etiketi kullanma. suggested_tags sadece mevcut etiketlerde olmayan 0-3 yeni etiket icersin; yeterli etiket varsa bos dizi dondur.',
+				'content' => 'Sen deneyimli bir Turkce SEO editorusun. Verilen WordPress yazisini Yoast benzeri kriterlere gore kapsamli bicimde iyilestir. JSON dondur: {"title":"...","meta_description":"...","content":"<p>...</p>","suggested_tags":["..."]}. Kurallar: baslik 50-60 karakter, meta 120-158 karakter, odak kelime baslikta/metada/ilk paragrafta/en fazla bir H2 icinde dogal gecsin. Konuyu oncelikle mevcut basliktan anla; odak kelime eksikse basligi konu kaynagi kabul et. Anahtar kelime yogunlugunu %0.8-1.8 araliginda tut; ayni kelimeyi sirf skor icin tekrar etme. Okunabilirligi dusurme: kisa cumleler, kisa paragraflar, aktif anlatim ve gecis kelimeleri kullan. Icerik 1000 kelimenin altindaysa kapsamli ama gercekci bicimde genislet, en az 2 H2 ve uygun H3 kullan. Mevcut FAQ varsa yeni FAQ ekleme; mevcut sonuc bolumu varsa ikinci sonuc bolumu ekleme. ' . $this->protected_block_instruction() . ' Mevcut gercekleri bozma, markdown fence/html/body etiketi kullanma. suggested_tags sadece mevcut etiketlerde olmayan 0-3 yeni etiket icersin; yeterli etiket varsa bos dizi dondur.',
 			],
 			[
 				'role'    => 'user',
-				'content' => "Odak kelime: {$keyword}\nTon: {$tone}\nMevcut baslik: {$current['title']}\nMevcut meta: {$current['meta_description']}\nKelime sayisi: {$current['word_count']}\nAnahtar kelime yogunlugu: %{$current['keyword_density']}\nFAQ var mi: " . ( $current['has_faq'] ? 'evet' : 'hayir' ) . "\nSonuc bolumu var mi: " . ( $current['has_conclusion'] ? 'evet' : 'hayir' ) . "\nMevcut etiketler: " . implode( ', ', (array) $current['existing_tags'] ) . "\n\nMevcut HTML icerik:\n" . $this->limit_content_for_prompt( $content, 18000 ),
+				'content' => "Konu basligi: {$current['title']}\nOdak kelime: {$keyword}\nTon: {$tone}\nMevcut baslik: {$current['title']}\nMevcut meta: {$current['meta_description']}\nKelime sayisi: {$current['word_count']}\nAnahtar kelime yogunlugu: %{$current['keyword_density']}\nFAQ var mi: " . ( $current['has_faq'] ? 'evet' : 'hayir' ) . "\nSonuc bolumu var mi: " . ( $current['has_conclusion'] ? 'evet' : 'hayir' ) . "\nMevcut etiketler: " . implode( ', ', (array) $current['existing_tags'] ) . "\n\nMevcut HTML icerik:\n" . $this->limit_content_for_prompt( $locked['content'], 18000 ),
 			],
 		];
 
@@ -361,7 +372,7 @@ class AISEO_OpenAI_Client {
 		$parsed   = $this->parse_json_response( $response['content'] ?? '' );
 
 		if ( ! empty( $parsed['content'] ) ) {
-			$parsed['content'] = $this->clean_model_html( (string) $parsed['content'] );
+			$parsed['content'] = $this->restore_bracket_blocks( $this->clean_model_html( (string) $parsed['content'] ), $locked['blocks'] );
 		}
 
 		if ( isset( $parsed['suggested_tags'] ) && is_array( $parsed['suggested_tags'] ) ) {
@@ -487,7 +498,7 @@ Kurallar: Icerik {$lang_str} dilinde olacak, ton: {$tone}, yaklasik {$target_wc}
 
 		if ( $http_code !== 200 ) {
 			$error_msg = $data['error']['message'] ?? 'API istegi basarisiz';
-			throw new RuntimeException( 'OpenAI API hatasi: ' . $http_code . '. ' . $error_msg );
+			throw new RuntimeException( 'AI API hatasi: ' . $http_code . '. ' . $error_msg );
 		}
 
 		$content       = $data['choices'][0]['message']['content'] ?? '';
@@ -502,6 +513,47 @@ Kurallar: Icerik {$lang_str} dilinde olacak, ton: {$tone}, yaklasik {$target_wc}
 			'model'         => $data['model'] ?? $this->model,
 			'finish_reason' => $data['choices'][0]['finish_reason'] ?? '',
 		];
+	}
+
+	private function protected_block_instruction(): string {
+		return 'Icerikte AISEO_PROTECTED_BRACKET_BLOCK_* biciminde kilitli bloklar gorebilirsin. Bunlar yazidaki [ ... ] shortcode/hesaplama tablosu alanlaridir; silme, degistirme, bolme, cevirme veya yeniden yazma. Ciktida aynen ve mumkunse ayni konumda koru.';
+	}
+
+	private function protect_bracket_blocks( string $content ): array {
+		$blocks = [];
+		$locked = preg_replace_callback(
+			'/\[[^\[\]\r\n]{1,800}\]/u',
+			function ( array $match ) use ( &$blocks ): string {
+				$token            = 'AISEO_PROTECTED_BRACKET_BLOCK_' . count( $blocks );
+				$blocks[ $token ] = $match[0];
+				return $token;
+			},
+			$content
+		);
+
+		return [
+			'content' => is_string( $locked ) ? $locked : $content,
+			'blocks'  => $blocks,
+		];
+	}
+
+	private function restore_bracket_blocks( string $content, array $blocks ): string {
+		foreach ( $blocks as $token => $block ) {
+			$content = str_replace( $token, $block, $content );
+		}
+
+		$missing = [];
+		foreach ( $blocks as $block ) {
+			if ( strpos( $content, $block ) === false ) {
+				$missing[] = $block;
+			}
+		}
+
+		if ( ! empty( $missing ) ) {
+			$content = implode( "\n\n", $missing ) . "\n\n" . $content;
+		}
+
+		return $content;
 	}
 
 	private function parse_json_response( string $content ): array {
@@ -527,7 +579,7 @@ Kurallar: Icerik {$lang_str} dilinde olacak, ton: {$tone}, yaklasik {$target_wc}
 			return $content;
 		}
 
-		return mb_substr( $content, 0, $limit ) . "\n\n[Icerik uzun oldugu icin burada kesildi; verilen bolumu butunlugunu koruyarak iyilestir.]";
+		return mb_substr( $content, 0, $limit ) . "\n\nNot: Icerik uzun oldugu icin burada kesildi; verilen bolumu butunlugunu koruyarak iyilestir.";
 	}
 
 	private function clean_model_html( string $html ): string {

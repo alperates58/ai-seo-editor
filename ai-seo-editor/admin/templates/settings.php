@@ -20,6 +20,16 @@ if ( ! defined( 'ABSPATH' ) ) {
 			<h2 class="aiseo-card__title"><?php esc_html_e( 'OpenAI API Ayarları', 'ai-seo-editor' ); ?></h2>
 			<table class="form-table aiseo-settings-table">
 				<tr>
+					<th><?php esc_html_e( 'Sağlayıcı', 'ai-seo-editor' ); ?></th>
+					<td>
+						<select name="ai_provider" id="aiseo-provider">
+							<option value="openai" <?php selected( $settings->get( 'ai_provider' ), 'openai' ); ?>>OpenAI</option>
+							<option value="deepseek" <?php selected( $settings->get( 'ai_provider' ), 'deepseek' ); ?>>DeepSeek</option>
+						</select>
+						<p class="description"><?php esc_html_e( 'DeepSeek için model olarak deepseek-chat veya deepseek-reasoner seçin.', 'ai-seo-editor' ); ?></p>
+					</td>
+				</tr>
+				<tr>
 					<th><?php esc_html_e( 'API Anahtarı', 'ai-seo-editor' ); ?></th>
 					<td>
 						<div class="aiseo-api-key-wrap">
@@ -35,6 +45,15 @@ if ( ! defined( 'ABSPATH' ) ) {
 							</button>
 						</div>
 						<p class="description"><?php esc_html_e( 'OpenAI API anahtarınız şifreli olarak saklanır.', 'ai-seo-editor' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th><?php esc_html_e( 'Base URL', 'ai-seo-editor' ); ?></th>
+					<td>
+						<input type="url" name="ai_base_url" id="aiseo-base-url"
+							value="<?php echo esc_attr( $settings->get( 'ai_base_url' ) ); ?>"
+							class="regular-text" placeholder="https://api.deepseek.com">
+						<p class="description"><?php esc_html_e( 'Boş bırakılırsa OpenAI için https://api.openai.com/v1, DeepSeek için https://api.deepseek.com kullanılır.', 'ai-seo-editor' ); ?></p>
 					</td>
 				</tr>
 				<tr>
