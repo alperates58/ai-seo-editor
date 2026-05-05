@@ -777,6 +777,10 @@
 				UI.notice('aiseo-agent-notice', 'En az bir yazı seçin.', 'warning');
 				return;
 			}
+			if (selected.length > 3) {
+				UI.notice('aiseo-agent-notice', 'İlk sürümde aynı anda en fazla 3 yazı seçin. DeepSeek tam düzeltme işlemi uzun sürebilir.', 'warning');
+				return;
+			}
 
 			const targetSeo = parseInt(document.getElementById('aiseo-agent-target-seo')?.value) || 80;
 			const targetRead = parseInt(document.getElementById('aiseo-agent-target-read')?.value) || 75;

@@ -9,7 +9,8 @@ class AISEO_OpenAI_Client {
 	private string $model;
 	private int $max_tokens;
 	private string $base_url = 'https://api.openai.com/v1';
-	private int $timeout     = 120;
+	private int $timeout     = 240;
+	private bool $is_deepseek = false;
 
 	public function __construct( AISEO_Settings $settings ) {
 		$this->api_key    = $settings->get_api_key();
@@ -17,8 +18,8 @@ class AISEO_OpenAI_Client {
 		$this->max_tokens = (int) $settings->get( 'max_tokens' );
 		$provider         = (string) $settings->get( 'ai_provider' );
 		$base_url         = trim( (string) $settings->get( 'ai_base_url' ) );
-		$is_deepseek      = $provider === 'deepseek' || str_starts_with( $this->model, 'deepseek-' );
-		if ( $is_deepseek ) {
+		$this->is_deepseek = $provider === 'deepseek' || str_starts_with( $this->model, 'deepseek-' );
+		if ( $this->is_deepseek ) {
 			$this->base_url = 'https://api.deepseek.com';
 		}
 		if ( $base_url !== '' ) {
@@ -43,7 +44,7 @@ class AISEO_OpenAI_Client {
 			'max_tokens'  => $max_tokens ?? $this->max_tokens,
 		];
 
-		if ( $json_mode ) {
+		if ( $json_mode && ! $this->is_deepseek ) {
 			$payload['response_format'] = [ 'type' => 'json_object' ];
 		}
 
@@ -370,8 +371,12 @@ class AISEO_OpenAI_Client {
 			],
 		];
 
-		$response = $this->chat_completion( $messages, 5000, 0.6, true );
+		$response = $this->chat_completion( $messages, min( 3800, max( 2200, $this->max_tokens ) ), 0.55, true );
 		$parsed   = $this->parse_json_response( $response['content'] ?? '' );
+
+		if ( empty( $parsed['content'] ) ) {
+			$parsed['error'] = 'AI yaniti JSON olarak okunamadi veya content alani bos dondu.';
+		}
 
 		if ( ! empty( $parsed['content'] ) ) {
 			$parsed['content'] = $this->restore_bracket_blocks( $this->clean_model_html( (string) $parsed['content'] ), $locked['blocks'] );
@@ -522,7 +527,7 @@ Kurallar: Icerik {$lang_str} dilinde olacak, ton: {$tone}, yaklasik {$target_wc}
 
 		$message       = is_array( $data['choices'][0]['message'] ?? null ) ? $data['choices'][0]['message'] : [];
 		$content       = (string) ( $message['content'] ?? '' );
-		if ( $content === '' && ! empty( $message['reasoning_content'] ) ) {
+		if ( $content === '' && ! empty( $message['reasoning_content'] ) && empty( $payload['response_format'] ) ) {
 			$content = (string) $message['reasoning_content'];
 		}
 		$input_tokens  = $data['usage']['prompt_tokens'] ?? 0;
@@ -536,6 +541,7 @@ Kurallar: Icerik {$lang_str} dilinde olacak, ton: {$tone}, yaklasik {$target_wc}
 			'total_tokens'  => $input_tokens + $output_tokens,
 			'model'         => $data['model'] ?? $this->model,
 			'finish_reason' => $data['choices'][0]['finish_reason'] ?? '',
+			'raw_body'      => $body,
 		];
 	}
 
@@ -592,6 +598,16 @@ Kurallar: Icerik {$lang_str} dilinde olacak, ton: {$tone}, yaklasik {$target_wc}
 		$decoded = json_decode( $content, true );
 		if ( json_last_error() === JSON_ERROR_NONE && is_array( $decoded ) ) {
 			return $decoded;
+		}
+
+		$start = strpos( $content, '{' );
+		$end   = strrpos( $content, '}' );
+		if ( $start !== false && $end !== false && $end > $start ) {
+			$json = substr( $content, $start, $end - $start + 1 );
+			$decoded = json_decode( $json, true );
+			if ( json_last_error() === JSON_ERROR_NONE && is_array( $decoded ) ) {
+				return $decoded;
+			}
 		}
 
 		return [ 'raw' => $content ];

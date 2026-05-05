@@ -251,11 +251,34 @@ class AISEO_Rest_Controller {
 		$title_before   = $post instanceof WP_Post ? $post->post_title : '';
 		$meta_before    = $yoast->get_meta_description( $post_id );
 
-		$client = new AISEO_OpenAI_Client( $this->settings );
-		$result = $client->optimize_full_post( $post_id, $keyword, (string) $this->settings->get( 'default_tone' ) );
+		try {
+			$client = new AISEO_OpenAI_Client( $this->settings );
+			$result = $client->optimize_full_post( $post_id, $keyword, (string) $this->settings->get( 'default_tone' ) );
+		} catch ( Throwable $e ) {
+			$this->logger->log_ai_operation(
+				$post_id,
+				'full_optimize',
+				(string) $this->settings->get( 'openai_model' ),
+				0,
+				0,
+				'error',
+				$e->getMessage()
+			);
+			return new WP_Error( 'aiseo_optimize_error', $e->getMessage(), [ 'status' => 500 ] );
+		}
 
 		if ( empty( $result['content'] ) ) {
-			return new WP_Error( 'aiseo_optimize_error', __( 'Tam duzeltme onerisi uretilemedi.', 'ai-seo-editor' ), [ 'status' => 500 ] );
+			$error = sanitize_text_field( (string) ( $result['error'] ?? __( 'Tam düzeltme önerisi üretilemedi.', 'ai-seo-editor' ) ) );
+			$this->logger->log_ai_operation(
+				$post_id,
+				'full_optimize',
+				(string) $this->settings->get( 'openai_model' ),
+				0,
+				0,
+				'error',
+				$error
+			);
+			return new WP_Error( 'aiseo_optimize_error', $error, [ 'status' => 500 ] );
 		}
 
 		$title   = sanitize_text_field( $result['title'] ?? $title_before );
@@ -781,11 +804,34 @@ class AISEO_Rest_Controller {
 		$title_before   = $post->post_title;
 		$meta_before    = $yoast->get_meta_description( $post_id );
 
-		$client = new AISEO_OpenAI_Client( $this->settings );
-		$result = $client->optimize_full_post( $post_id, $keyword, (string) $this->settings->get( 'default_tone' ) );
+		try {
+			$client = new AISEO_OpenAI_Client( $this->settings );
+			$result = $client->optimize_full_post( $post_id, $keyword, (string) $this->settings->get( 'default_tone' ) );
+		} catch ( Throwable $e ) {
+			$this->logger->log_ai_operation(
+				$post_id,
+				'agent_full_optimize',
+				(string) $this->settings->get( 'openai_model' ),
+				0,
+				0,
+				'error',
+				$e->getMessage()
+			);
+			return new WP_Error( 'aiseo_optimize_error', $e->getMessage(), [ 'status' => 500 ] );
+		}
 
 		if ( empty( $result['content'] ) ) {
-			return new WP_Error( 'aiseo_optimize_error', __( 'Tam düzeltme önerisi üretilemedi.', 'ai-seo-editor' ), [ 'status' => 500 ] );
+			$error = sanitize_text_field( (string) ( $result['error'] ?? __( 'Tam düzeltme önerisi üretilemedi.', 'ai-seo-editor' ) ) );
+			$this->logger->log_ai_operation(
+				$post_id,
+				'agent_full_optimize',
+				(string) $this->settings->get( 'openai_model' ),
+				0,
+				0,
+				'error',
+				$error
+			);
+			return new WP_Error( 'aiseo_optimize_error', $error, [ 'status' => 500 ] );
 		}
 
 		$title   = sanitize_text_field( $result['title'] ?? $title_before );
