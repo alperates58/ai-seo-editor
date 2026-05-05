@@ -399,7 +399,18 @@ class AISEO_OpenAI_Client {
 		}
 
 		if ( ! empty( $parsed['content'] ) ) {
-			$parsed['content'] = $this->restore_bracket_blocks( $this->clean_model_html( (string) $parsed['content'] ), $locked['blocks'] );
+			$clean_content = $this->clean_model_html( (string) $parsed['content'] );
+			$generated_word_count = aiseo_count_words( $clean_content );
+			$minimum_word_count = min( 300, max( 120, (int) floor( (int) $current['word_count'] * 0.4 ) ) );
+			if ( $this->looks_like_analysis_dump( $clean_content ) || $this->looks_like_raw_json_dump( $clean_content ) ) {
+				unset( $parsed['content'] );
+				$parsed['error'] = 'AI yaniti temiz icerik yerine analiz/JSON metni dondurdu. Icerik uygulanmadi.';
+			} elseif ( $generated_word_count < $minimum_word_count ) {
+				unset( $parsed['content'] );
+				$parsed['error'] = 'AI yaniti cok kisa dondu. Icerik uygulanmadi.';
+			} else {
+				$parsed['content'] = $this->restore_bracket_blocks( $clean_content, $locked['blocks'] );
+			}
 		}
 
 		if ( isset( $parsed['suggested_tags'] ) && is_array( $parsed['suggested_tags'] ) ) {
@@ -639,7 +650,7 @@ Kurallar: Icerik {$lang_str} dilinde olacak, ton: {$tone}, yaklasik {$target_wc}
 			return '';
 		}
 
-		if ( $this->looks_like_analysis_dump( $content ) ) {
+		if ( $this->looks_like_analysis_dump( $content ) || $this->looks_like_raw_json_dump( $content ) ) {
 			return '';
 		}
 
@@ -684,6 +695,19 @@ Kurallar: Icerik {$lang_str} dilinde olacak, ton: {$tone}, yaklasik {$target_wc}
 			}
 		}
 		return $hits >= 3;
+	}
+
+	private function looks_like_raw_json_dump( string $content ): bool {
+		$trimmed = trim( $content );
+		if ( $trimmed === '' ) {
+			return false;
+		}
+
+		if ( str_starts_with( $trimmed, '{' ) && preg_match( '/"(title|meta_description|content)"\s*:/i', $trimmed ) ) {
+			return true;
+		}
+
+		return preg_match( '/^\s*\{\s*"title"\s*:/i', $trimmed ) === 1;
 	}
 
 	private function limit_content_for_prompt( string $content, int $limit ): string {

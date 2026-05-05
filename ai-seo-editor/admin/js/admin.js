@@ -741,8 +741,12 @@
 				event.preventDefault();
 				if (!editorFullSuggestionState) return;
 				const data = editorFullSuggestionState;
+				if (data.content && !isAcceptableGeneratedContent(data.content)) {
+					UI.notice('aiseo-editor-notice', 'AI yaniti temiz HTML degil; editore aktarilmadi.', 'error');
+					return;
+				}
 				if (data.title) applyEditorTitle(data.title);
-				if (data.content) applyEditorContent(data.content);
+				if (data.content && !applyEditorContent(data.content)) return;
 				if (data.meta) applyEditorMeta(data.meta, data.post_id || Config.postId);
 				if (data.tags) applyEditorTags(data.tags);
 				UI.notice('aiseo-editor-notice', 'Tam düzeltme editöre aktarıldı. Kontrol edip Güncelle ile kaydedin.', 'success');
@@ -1036,6 +1040,7 @@
 	function renderEditorFullSuggestion(container, data) {
 		if (!container) return;
 		editorFullSuggestionState = data;
+		const hasBadContent = data.content && !isAcceptableGeneratedContent(data.content);
 		const okSteps = (data.steps || []).filter((step) => step.success);
 		const failedSteps = (data.steps || []).filter((step) => !step.success);
 		const tagPreview = Array.isArray(data.tags) && data.tags.length
@@ -1055,8 +1060,12 @@
 			'</div>';
 
 		document.getElementById('aiseo-editor-apply-full')?.addEventListener('click', () => {
+			if (data.content && !isAcceptableGeneratedContent(data.content)) {
+				UI.notice('aiseo-editor-notice', 'AI yaniti temiz HTML degil; editore aktarilmadi.', 'error');
+				return;
+			}
 			if (data.title) applyEditorTitle(data.title);
-			if (data.content) applyEditorContent(data.content);
+			if (data.content && !applyEditorContent(data.content)) return;
 			if (data.meta) applyEditorMeta(data.meta, data.post_id || Config.postId);
 			if (data.tags) applyEditorTags(data.tags);
 			UI.notice('aiseo-editor-notice', 'Tam düzeltme editöre aktarıldı. Kontrol edip Güncelle ile kaydedin.', 'success');
@@ -1098,12 +1107,16 @@
 	}
 
 	function applyEditorContent(content) {
-		content = cleanGeneratedHtml(content);
+		content = normalizeGeneratedContent(content);
+		if (!content || looksLikeBadAiDump(content)) {
+			UI.notice('aiseo-editor-notice', 'AI yaniti temiz HTML degil; editore aktarilmadi.', 'error');
+			return false;
+		}
 		if (window.wp?.data?.dispatch) {
 			const editor = window.wp.data.dispatch('core/editor');
 			if (editor?.editPost) {
 				editor.editPost({ content });
-				return;
+				return true;
 			}
 		}
 		const tinymceEditor = window.tinymce?.get?.('content');
@@ -1119,6 +1132,7 @@
 			textarea.dispatchEvent(new Event('input', { bubbles: true }));
 			textarea.dispatchEvent(new Event('change', { bubbles: true }));
 		}
+		return true;
 	}
 
 	function cleanGeneratedHtml(html) {
@@ -1129,6 +1143,67 @@
 			.replace(/^\s*(?:<!doctype\s+html[^>]*>|<html[^>]*>|<body[^>]*>)/i, '')
 			.replace(/(?:<\/body>|<\/html>)\s*$/i, '')
 			.trim();
+	}
+
+	function normalizeGeneratedContent(value) {
+		let html = String(value || '').trim();
+		if (!html) return '';
+
+		html = html
+			.replace(/^\s*```(?:json|html|HTML|JSON)?\s*/, '')
+			.replace(/\s*```\s*$/, '')
+			.trim();
+
+		if (html[0] === '{') {
+			try {
+				const parsed = JSON.parse(html);
+				if (parsed && typeof parsed.content === 'string') {
+					html = parsed.content;
+				}
+			} catch (e) {
+				return '';
+			}
+		}
+
+		const articleMatch = html.match(/<article\b[^>]*data-aiseo-output=["']?1["']?[^>]*>([\s\S]*?)<\/article>/i) ||
+			html.match(/<article\b[^>]*>([\s\S]*?)<\/article>/i);
+		if (articleMatch) {
+			html = articleMatch[1];
+		}
+
+		return cleanGeneratedHtml(html);
+	}
+
+	function isAcceptableGeneratedContent(value) {
+		const content = normalizeGeneratedContent(value);
+		return !!content && !looksLikeBadAiDump(content);
+	}
+
+	function looksLikeBadAiDump(value) {
+		const raw = String(value || '').trim();
+		if (!raw) return true;
+		if (/^\s*\{\s*"(title|meta_description|content)"\s*:/i.test(raw)) return true;
+
+		const text = raw
+			.replace(/<[^>]*>/g, ' ')
+			.replace(/\s+/g, ' ')
+			.toLowerCase();
+		const signals = [
+			'we need to improve',
+			'yoast criteria',
+			'current content',
+			'keyword density',
+			'meta description',
+			'need to',
+			"let's",
+			'actually',
+			'analysis'
+		];
+		let hits = 0;
+		signals.forEach((signal) => {
+			if (text.includes(signal)) hits += 1;
+		});
+		return hits >= 3;
 	}
 
 	function applyEditorTitle(title) {
