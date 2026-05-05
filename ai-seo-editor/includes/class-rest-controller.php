@@ -573,13 +573,23 @@ class AISEO_Rest_Controller {
 		}
 
 		$client = new AISEO_OpenAI_Client( $this->settings );
-		$ok     = $client->test_connection();
+		$result = $client->test_connection_details();
+		$ok     = (bool) ( $result['connected'] ?? false );
+		$error  = sanitize_text_field( (string) ( $result['message'] ?? '' ) );
 
 		return $this->ok(
-			[ 'connected' => $ok ],
+			[
+				'connected' => $ok,
+				'model'     => sanitize_text_field( (string) ( $result['model'] ?? $this->settings->get( 'openai_model' ) ) ),
+				'error'     => $ok ? '' : $error,
+			],
 			$ok
 				? __( 'API bağlantısı başarılı!', 'ai-seo-editor' )
-				: __( 'API anahtarı geçersiz veya bağlantı hatası.', 'ai-seo-editor' )
+				: sprintf(
+					/* translators: %s: API error message */
+					__( 'API bağlantısı başarısız: %s', 'ai-seo-editor' ),
+					$error ?: __( 'Bilinmeyen hata.', 'ai-seo-editor' )
+				)
 		);
 	}
 

@@ -460,18 +460,35 @@ Kurallar: Icerik {$lang_str} dilinde olacak, ton: {$tone}, yaklasik {$target_wc}
 	}
 
 	public function test_connection(): bool {
+		$result = $this->test_connection_details();
+		return (bool) ( $result['connected'] ?? false );
+	}
+
+	public function test_connection_details(): array {
 		if ( empty( $this->api_key ) ) {
-			return false;
+			return [
+				'connected' => false,
+				'message'   => 'AI API anahtari tanimlanmamis.',
+			];
 		}
+
 		try {
 			$result = $this->chat_completion(
-				[ [ 'role' => 'user', 'content' => 'Hi' ] ],
-				5,
+				[ [ 'role' => 'user', 'content' => 'Sadece OK yaz.' ] ],
+				16,
 				0.0
 			);
-			return ! empty( $result['content'] );
+			$connected = ! empty( $result['content'] );
+			return [
+				'connected' => $connected,
+				'message'   => $connected ? 'API baglantisi basarili.' : 'API yaniti bos dondu.',
+				'model'     => $result['model'] ?? $this->model,
+			];
 		} catch ( Throwable $e ) {
-			return false;
+			return [
+				'connected' => false,
+				'message'   => $e->getMessage(),
+			];
 		}
 	}
 
