@@ -26,7 +26,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 							<option value="openai" <?php selected( $settings->get( 'ai_provider' ), 'openai' ); ?>>OpenAI</option>
 							<option value="deepseek" <?php selected( $settings->get( 'ai_provider' ), 'deepseek' ); ?>>DeepSeek</option>
 						</select>
-						<p class="description"><?php esc_html_e( 'DeepSeek için model olarak deepseek-chat veya deepseek-reasoner seçin.', 'ai-seo-editor' ); ?></p>
+						<p class="description"><?php esc_html_e( 'DeepSeek için model olarak deepseek-v4-flash veya deepseek-v4-pro seçin.', 'ai-seo-editor' ); ?></p>
 					</td>
 				</tr>
 				<tr>
@@ -44,7 +44,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 								<?php esc_html_e( 'Bağlantıyı Test Et', 'ai-seo-editor' ); ?>
 							</button>
 						</div>
-						<p class="description"><?php esc_html_e( 'OpenAI API anahtarınız şifreli olarak saklanır.', 'ai-seo-editor' ); ?></p>
+						<p class="description"><?php esc_html_e( 'API anahtarınız şifreli olarak saklanır.', 'ai-seo-editor' ); ?></p>
 					</td>
 				</tr>
 				<tr>

@@ -179,8 +179,10 @@ class AISEO_Settings {
 			'gpt-4o'         => 'GPT-4o (Dengeli)',
 			'gpt-4-turbo'    => 'GPT-4 Turbo (Premium)',
 			'gpt-3.5-turbo'  => 'GPT-3.5 Turbo (Hızlı)',
-			'deepseek-chat'  => 'DeepSeek Chat',
-			'deepseek-reasoner' => 'DeepSeek Reasoner',
+			'deepseek-v4-flash' => 'DeepSeek V4 Flash',
+			'deepseek-v4-pro'   => 'DeepSeek V4 Pro',
+			'deepseek-chat'     => 'DeepSeek Chat (Eski Alias)',
+			'deepseek-reasoner' => 'DeepSeek Reasoner (Eski Alias)',
 		];
 	}
 

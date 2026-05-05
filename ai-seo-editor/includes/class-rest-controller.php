@@ -567,10 +567,9 @@ class AISEO_Rest_Controller {
 	}
 
 	public function test_api_key( WP_REST_Request $request ): WP_REST_Response {
-		$raw_key = sanitize_text_field( $request->get_param( 'api_key' ) ?? '' );
-
-		if ( ! empty( $raw_key ) && strpos( $raw_key, '*' ) === false ) {
-			$this->settings->save( [ 'openai_api_key' => $raw_key ] );
+		$body = $request->get_json_params() ?: $request->get_body_params();
+		if ( ! empty( $body ) ) {
+			$this->settings->save( $body );
 		}
 
 		$client = new AISEO_OpenAI_Client( $this->settings );

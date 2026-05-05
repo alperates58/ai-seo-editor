@@ -50,7 +50,7 @@
 		optimizeTags:     (pid, data)  => API.request('/tags/optimize/' + pid, 'POST', data || {}),
 		getSettings:      ()           => API.request('/settings'),
 		saveSettings:     (data)       => API.request('/settings', 'POST', data),
-		testKey:          (key)        => API.request('/settings/test-key', 'POST', { api_key: key }),
+		testKey:          (data)       => API.request('/settings/test-key', 'POST', data || {}),
 		getDashboard:     ()           => API.request('/dashboard'),
 	};
 
@@ -1211,8 +1211,7 @@
 			testBtn.addEventListener('click', async () => {
 				UI.loading(testBtn, true);
 				try {
-					const key = keyInput.value?.trim();
-					const res = await API.testKey(key);
+					const res = await API.testKey(collectSettings());
 					UI.notice('aiseo-settings-notice', res.message, res.data?.connected ? 'success' : 'error');
 				} catch (e) {
 					UI.notice('aiseo-settings-notice', i18n.testKeyFail || 'Bağlantı başarısız.', 'error');
