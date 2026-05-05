@@ -476,14 +476,14 @@ Kurallar: Icerik {$lang_str} dilinde olacak, ton: {$tone}, yaklasik {$target_wc}
 
 		try {
 			$result = $this->chat_completion(
-				[ [ 'role' => 'user', 'content' => 'Sadece OK yaz.' ] ],
-				16,
+				[ [ 'role' => 'user', 'content' => 'Baglanti testi. Tek kelimeyle OK yaz.' ] ],
+				64,
 				0.0
 			);
-			$connected = ! empty( $result['content'] );
+			$connected = ! empty( $result['has_choice'] );
 			return [
 				'connected' => $connected,
-				'message'   => $connected ? 'API baglantisi basarili.' : 'API yaniti bos dondu.',
+				'message'   => $connected ? 'API baglantisi basarili.' : 'API yaniti beklenen bicimde donmedi.',
 				'model'     => $result['model'] ?? $this->model,
 			];
 		} catch ( Throwable $e ) {
@@ -520,12 +520,17 @@ Kurallar: Icerik {$lang_str} dilinde olacak, ton: {$tone}, yaklasik {$target_wc}
 			throw new RuntimeException( 'AI API hatasi: ' . $http_code . '. ' . $error_msg );
 		}
 
-		$content       = $data['choices'][0]['message']['content'] ?? '';
+		$message       = is_array( $data['choices'][0]['message'] ?? null ) ? $data['choices'][0]['message'] : [];
+		$content       = (string) ( $message['content'] ?? '' );
+		if ( $content === '' && ! empty( $message['reasoning_content'] ) ) {
+			$content = (string) $message['reasoning_content'];
+		}
 		$input_tokens  = $data['usage']['prompt_tokens'] ?? 0;
 		$output_tokens = $data['usage']['completion_tokens'] ?? 0;
 
 		return [
 			'content'       => $content,
+			'has_choice'    => ! empty( $data['choices'] ),
 			'input_tokens'  => $input_tokens,
 			'output_tokens' => $output_tokens,
 			'total_tokens'  => $input_tokens + $output_tokens,
