@@ -27,6 +27,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 			<button type="button" id="aiseo-agent-start" class="button button-primary">
 				<?php esc_html_e( 'Seçilenlere Öneri Hazırla', 'ai-seo-editor' ); ?>
 			</button>
+			<button type="button" id="aiseo-agent-refresh-all" class="button">
+				<?php esc_html_e( 'Tumunu Yenile', 'ai-seo-editor' ); ?>
+			</button>
 			<div id="aiseo-agent-progress-wrap" style="display:none">
 				<div class="aiseo-progress-bar">
 					<div class="aiseo-progress-fill" id="aiseo-agent-progress" style="width:0%"></div>

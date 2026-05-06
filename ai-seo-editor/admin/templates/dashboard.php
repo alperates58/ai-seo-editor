@@ -3,8 +3,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 /** @var array $stats */
-/** @var int[] $all_post_ids */
-$all_post_ids = array_map( 'absint', $all_post_ids ?? [] );
 ?>
 <div class="wrap aiseo-wrap">
 	<div class="aiseo-page-heading">
@@ -16,7 +14,6 @@ $all_post_ids = array_map( 'absint', $all_post_ids ?? [] );
 			type="button"
 			id="aiseo-refresh-all-analyses"
 			class="button button-primary"
-			data-post-ids="<?php echo esc_attr( wp_json_encode( $all_post_ids ) ); ?>"
 		>
 			<?php esc_html_e( 'Tüm Analizleri Yenile', 'ai-seo-editor' ); ?>
 		</button>

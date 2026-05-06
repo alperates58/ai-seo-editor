@@ -3,6 +3,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 /** @var WP_Post[] $posts */
+/** @var string $current_score_filter */
+$current_score_filter = $current_score_filter ?? '';
 ?>
 <div class="wrap aiseo-wrap">
 	<h1 class="aiseo-page-title">
@@ -41,6 +43,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 			<option value="green"><?php esc_html_e( 'Yeşil (80+)', 'ai-seo-editor' ); ?></option>
 			<option value="none"><?php esc_html_e( 'Analiz Edilmemiş', 'ai-seo-editor' ); ?></option>
 		</select>
+		<span id="aiseo-bulk-visible-count" class="aiseo-toolbar__count"></span>
 	</div>
 
 	<table class="aiseo-table wp-list-table widefat fixed striped" id="aiseo-bulk-table">
@@ -94,4 +97,5 @@ if ( ! defined( 'ABSPATH' ) ) {
 		<?php endforeach; ?>
 		</tbody>
 	</table>
+	<p id="aiseo-bulk-empty-state" class="aiseo-empty" style="display:none"><?php esc_html_e( 'Secili filtrelerde gosterilecek yazi bulunamadi.', 'ai-seo-editor' ); ?></p>
 </div>

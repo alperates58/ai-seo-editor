@@ -153,6 +153,67 @@
 		return '<span class="aiseo-badge aiseo-badge--' + c + '">' + escapeHtml(v) + '</span>';
 	}
 
+	function uniqueIds(values) {
+		return Array.from(new Set((values || [])
+			.map((value) => parseInt(value))
+			.filter((value) => Number.isFinite(value) && value > 0)));
+	}
+
+	function setProgress(progressBar, statusEl, processed, total, prefix) {
+		const safeTotal = total > 0 ? total : 1;
+		const pct = Math.round((processed / safeTotal) * 100);
+		if (progressBar) progressBar.style.width = pct + '%';
+		if (statusEl) statusEl.textContent = (prefix ? prefix + ' ' : '') + processed + ' / ' + total;
+	}
+
+	async function runBulkAnalyzeQueue(postIds, opts) {
+		const ids = uniqueIds(postIds);
+		const options = opts || {};
+		const batchSize = options.batchSize || 5;
+		let processed = 0;
+		let succeeded = 0;
+		let failed = 0;
+
+		if (!ids.length) {
+			return { processed, succeeded, failed };
+		}
+
+		if (options.button) UI.loading(options.button, true);
+		if (options.progressWrap) UI.spin(options.progressWrap, true);
+		setProgress(options.progressBar, options.statusEl, 0, ids.length, options.statusPrefix);
+
+		try {
+			for (let i = 0; i < ids.length; i += batchSize) {
+				const batch = ids.slice(i, i + batchSize);
+				try {
+					const res = await API.bulkAnalyze(batch);
+					const results = res.data?.results || [];
+					const resultMap = new Map(results.map((item) => [parseInt(item.post_id), item]));
+
+					batch.forEach((postId) => {
+						const result = resultMap.get(postId);
+						if (result?.success) succeeded++;
+						else failed++;
+						if (options.onResult) options.onResult(postId, result || { post_id: postId, success: false });
+						processed++;
+						setProgress(options.progressBar, options.statusEl, processed, ids.length, options.statusPrefix);
+					});
+				} catch (e) {
+					batch.forEach((postId) => {
+						failed++;
+						if (options.onResult) options.onResult(postId, { post_id: postId, success: false, error: e?.message || i18n.error });
+						processed++;
+						setProgress(options.progressBar, options.statusEl, processed, ids.length, options.statusPrefix);
+					});
+				}
+			}
+		} finally {
+			if (options.button) UI.loading(options.button, false);
+		}
+
+		return { processed, succeeded, failed };
+	}
+
 	/* ------------------------------------------------------------------ */
 	/* Modal Close Button                                                   */
 	/* ------------------------------------------------------------------ */
@@ -1708,6 +1769,225 @@
 			UI.loading(refreshBtn, false);
 			UI.notice('aiseo-dashboard-notice', 'Analiz yenileme tamamlandi. Basarili: ' + succeeded + ', hata: ' + failed + '.', failed ? 'warning' : 'success');
 			setTimeout(() => window.location.reload(), 900);
+		});
+	}
+
+	function initBulkAnalysis() {
+		const startBtn       = document.getElementById('aiseo-bulk-start');
+		const selectAll      = document.getElementById('aiseo-select-all');
+		const selectAllH     = document.getElementById('aiseo-select-all-header');
+		const filter         = document.getElementById('aiseo-bulk-filter');
+		const search         = document.getElementById('aiseo-bulk-search');
+		const visibleCountEl = document.getElementById('aiseo-bulk-visible-count');
+		const emptyStateEl   = document.getElementById('aiseo-bulk-empty-state');
+		const rows           = Array.from(document.querySelectorAll('#aiseo-bulk-table tbody tr[data-post-id]'));
+
+		const applyFilters = () => {
+			const scoreValue = (filter?.value || '').trim();
+			const query = (search?.value || '').trim().toLowerCase();
+			let visible = 0;
+
+			rows.forEach((row) => {
+				const color = row.dataset.scoreColor || 'none';
+				const title = row.dataset.title || '';
+				const show = (!scoreValue || color === scoreValue) && (!query || title.includes(query));
+				row.style.display = show ? '' : 'none';
+				if (show) visible++;
+			});
+
+			if (visibleCountEl) visibleCountEl.textContent = visible + ' / ' + rows.length + ' yazi';
+			if (emptyStateEl) emptyStateEl.style.display = visible ? 'none' : '';
+		};
+
+		if (selectAll) {
+			selectAll.addEventListener('change', () => {
+				document.querySelectorAll('.aiseo-post-select').forEach((cb) => {
+					cb.checked = selectAll.checked;
+				});
+			});
+		}
+		if (selectAllH) {
+			selectAllH.addEventListener('change', () => {
+				document.querySelectorAll('.aiseo-post-select').forEach((cb) => {
+					cb.checked = selectAllH.checked;
+				});
+			});
+		}
+		if (filter) {
+			const initialFilter = new URLSearchParams(window.location.search).get('score_filter');
+			if (initialFilter) filter.value = initialFilter;
+			filter.addEventListener('change', applyFilters);
+		}
+		if (search) search.addEventListener('input', applyFilters);
+
+		applyFilters();
+		if (!startBtn) return;
+
+		startBtn.addEventListener('click', async () => {
+			const selected = uniqueIds(Array.from(document.querySelectorAll('.aiseo-post-select:checked')).map((cb) => cb.value));
+			if (!selected.length) {
+				UI.notice('aiseo-bulk-notice', i18n.selectPosts || 'En az bir yazi secin.', 'warning');
+				return;
+			}
+
+			const result = await runBulkAnalyzeQueue(selected, {
+				button: startBtn,
+				progressWrap: document.getElementById('aiseo-bulk-progress-wrap'),
+				progressBar: document.getElementById('aiseo-bulk-progress'),
+				statusEl: document.getElementById('aiseo-bulk-status'),
+				statusPrefix: 'Analiz',
+				onResult: (postId, data) => {
+					if (data?.success) {
+						UI.updateScoreBadge(postId, data.seo_score || 0, data.readability_score || 0);
+						updateBulkRow(data);
+					}
+				},
+			});
+
+			applyFilters();
+			UI.notice('aiseo-bulk-notice', 'Toplu analiz tamamlandi. Basarili: ' + result.succeeded + ', hata: ' + result.failed + '.', result.failed ? 'warning' : 'success');
+		});
+	}
+
+	async function runAgentOptimizationQueue(postIds, triggerBtn) {
+		const ids = uniqueIds(postIds);
+		if (!ids.length) {
+			UI.notice('aiseo-agent-notice', 'En az bir yazi secin.', 'warning');
+			return null;
+		}
+
+		const progressWrap = document.getElementById('aiseo-agent-progress-wrap');
+		const progressBar = document.getElementById('aiseo-agent-progress');
+		const statusEl = document.getElementById('aiseo-agent-status');
+		const targetSeo = parseInt(document.getElementById('aiseo-agent-target-seo')?.value) || 80;
+		const targetRead = parseInt(document.getElementById('aiseo-agent-target-read')?.value) || 75;
+		let done = 0;
+		let ready = 0;
+		let skipped = 0;
+		let failed = 0;
+
+		if (triggerBtn) UI.loading(triggerBtn, true);
+		UI.spin(progressWrap, true);
+		setProgress(progressBar, statusEl, 0, ids.length, 'Oneri');
+
+		try {
+			for (const postId of ids) {
+				const row = document.querySelector('#aiseo-agent-table tr[data-post-id="' + postId + '"]');
+				setAgentState(row, 'Analiz ediliyor...');
+				try {
+					const res = await API.agentOptimize({
+						post_id: postId,
+						target_seo: targetSeo,
+						target_readability: targetRead,
+					});
+					const data = res.data || {};
+					if (data.skipped) {
+						skipped++;
+						setAgentState(row, data.reason || 'Hedefte');
+					} else {
+						ready++;
+						agentProposals.set(postId, data);
+						setAgentState(row, 'Oneri hazir');
+						renderAgentAction(row, postId);
+					}
+					if (data.before) updateAgentScores(row, data.before.seo_score, data.before.readability_score);
+				} catch (e) {
+					failed++;
+					setAgentState(row, e.message || 'Hata');
+				}
+				done++;
+				setProgress(progressBar, statusEl, done, ids.length, 'Oneri');
+			}
+		} finally {
+			if (triggerBtn) UI.loading(triggerBtn, false);
+		}
+
+		UI.notice('aiseo-agent-notice', 'Otomatik iyilestirme taramasi tamamlandi. Hazir: ' + ready + ', hedefte: ' + skipped + ', hata: ' + failed + '.', failed ? 'warning' : 'success');
+		return { ready, skipped, failed };
+	}
+
+	function initAgentOptimizer() {
+		const startBtn = document.getElementById('aiseo-agent-start');
+		const refreshAllBtn = document.getElementById('aiseo-agent-refresh-all');
+		const selectAll = document.getElementById('aiseo-agent-select-all');
+		const selectAllHeader = document.getElementById('aiseo-agent-select-all-header');
+		if (!startBtn) return;
+
+		const toggleAll = (checked) => {
+			document.querySelectorAll('.aiseo-agent-select').forEach((cb) => {
+				cb.checked = checked;
+			});
+		};
+		if (selectAll) selectAll.addEventListener('change', () => toggleAll(selectAll.checked));
+		if (selectAllHeader) selectAllHeader.addEventListener('change', () => toggleAll(selectAllHeader.checked));
+
+		startBtn.addEventListener('click', async () => {
+			const selected = uniqueIds(Array.from(document.querySelectorAll('.aiseo-agent-select:checked')).map((cb) => cb.value));
+			await runAgentOptimizationQueue(selected, startBtn);
+		});
+
+		if (refreshAllBtn) {
+			refreshAllBtn.addEventListener('click', async () => {
+				const allIds = uniqueIds(Array.from(document.querySelectorAll('#aiseo-agent-table tr[data-post-id]')).map((row) => row.dataset.postId));
+				await runAgentOptimizationQueue(allIds, refreshAllBtn);
+			});
+		}
+
+		document.addEventListener('click', async (event) => {
+			const btn = event.target.closest('.aiseo-agent-apply');
+			if (!btn) return;
+			event.preventDefault();
+			const postId = parseInt(btn.dataset.postId);
+			const proposal = agentProposals.get(postId);
+			if (!proposal) return;
+			if (!confirm('Bu oneri yaziya uygulansin mi? Uygulama oncesinde revision olusturulur.')) return;
+
+			const row = btn.closest('tr');
+			UI.loading(btn, true);
+			setAgentState(row, 'Uygulaniyor...');
+			try {
+				const res = await API.agentApply({
+					post_id: postId,
+					title: proposal.title || '',
+					content: proposal.content || '',
+					meta: proposal.meta || '',
+					tags: proposal.tags || [],
+				});
+				const after = res.data?.after || {};
+				updateAgentScores(row, after.seo_score || 0, after.readability_score || 0);
+				setAgentState(row, 'Uygulandi');
+				btn.remove();
+				UI.notice('aiseo-agent-notice', 'Oneri uygulandi ve yazi yeniden analiz edildi.', 'success');
+			} catch (e) {
+				setAgentState(row, e.message || 'Uygulama hatasi');
+				UI.notice('aiseo-agent-notice', e.message || i18n.error, 'error');
+			} finally {
+				UI.loading(btn, false);
+			}
+		});
+	}
+
+	function initDashboard() {
+		const refreshBtn = document.getElementById('aiseo-refresh-all-analyses');
+		if (!refreshBtn) return;
+
+		refreshBtn.addEventListener('click', async () => {
+			const postIds = uniqueIds(Config.dashboardPostIds || []);
+			if (!postIds.length) {
+				UI.notice('aiseo-dashboard-notice', 'Analiz edilecek yayinlanmis yazi bulunamadi.', 'warning');
+				return;
+			}
+
+			const result = await runBulkAnalyzeQueue(postIds, {
+				button: refreshBtn,
+				progressWrap: document.getElementById('aiseo-dashboard-refresh-progress'),
+				progressBar: document.getElementById('aiseo-dashboard-progress-bar'),
+				statusEl: document.getElementById('aiseo-dashboard-progress-status'),
+				statusPrefix: 'Dashboard',
+			});
+
+			UI.notice('aiseo-dashboard-notice', 'Tum analizler yenilendi. Basarili: ' + result.succeeded + ', hata: ' + result.failed + '.', result.failed ? 'warning' : 'success');
+			setTimeout(() => window.location.reload(), 1200);
 		});
 	}
 

@@ -212,6 +212,18 @@ class AISEO_Admin {
 
 		$current_page = sanitize_key( $_GET['page'] ?? '' );
 		$post_id      = absint( $_GET['post'] ?? 0 );
+		$dashboard_post_ids = [];
+
+		if ( 'aiseo-dashboard' === $current_page ) {
+			$dashboard_post_ids = get_posts( [
+				'post_type'      => 'post',
+				'post_status'    => 'publish',
+				'posts_per_page' => -1,
+				'fields'         => 'ids',
+				'orderby'        => 'date',
+				'order'          => 'DESC',
+			] );
+		}
 
 		wp_localize_script( 'aiseo-admin', 'AISeoConfig', [
 			'restUrl'     => esc_url_raw( rest_url() ),
@@ -219,6 +231,7 @@ class AISEO_Admin {
 			'githubNonce' => wp_create_nonce( 'aiseo_github_version' ),
 			'postId'      => $post_id,
 			'currentPage' => $current_page,
+			'dashboardPostIds' => array_map( 'absint', $dashboard_post_ids ),
 			'pluginUrl'   => AISEO_PLUGIN_URL,
 			'ajaxUrl'     => admin_url( 'admin-ajax.php' ),
 			'i18n'        => [
@@ -249,15 +262,7 @@ class AISEO_Admin {
 			wp_die( esc_html__( 'Yetkiniz yok.', 'ai-seo-editor' ) );
 		}
 		$stats = $this->logger->get_dashboard_stats();
-		$all_post_ids = get_posts( [
-			'post_type'      => 'post',
-			'post_status'    => 'publish',
-			'posts_per_page' => -1,
-			'fields'         => 'ids',
-			'orderby'        => 'date',
-			'order'          => 'DESC',
-		] );
-		$this->render_template( 'dashboard', [ 'stats' => $stats, 'all_post_ids' => $all_post_ids ] );
+		$this->render_template( 'dashboard', [ 'stats' => $stats ] );
 	}
 
 	public function page_posts_analysis(): void {
@@ -298,6 +303,7 @@ class AISEO_Admin {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'Yetkiniz yok.', 'ai-seo-editor' ) );
 		}
+		$current_score_filter = sanitize_key( $_GET['score_filter'] ?? '' );
 		$posts = get_posts( [
 			'post_type'      => 'post',
 			'post_status'    => 'publish',
@@ -305,7 +311,17 @@ class AISEO_Admin {
 			'orderby'        => 'date',
 			'order'          => 'DESC',
 		] );
-		$this->render_template( 'bulk-analysis', [ 'posts' => $posts ] );
+		if ( in_array( $current_score_filter, [ 'green', 'orange', 'red', 'none' ], true ) ) {
+			$posts = array_values( array_filter( $posts, function ( $post ) use ( $current_score_filter ) {
+				$seo_score = (int) get_post_meta( $post->ID, '_aiseo_seo_score', true );
+				$color     = $seo_score > 0 ? aiseo_get_score_color( $seo_score ) : 'none';
+				return $color === $current_score_filter;
+			} ) );
+		}
+		$this->render_template( 'bulk-analysis', [
+			'posts'                => $posts,
+			'current_score_filter' => $current_score_filter,
+		] );
 	}
 
 	public function page_article_generator(): void {
@@ -325,7 +341,7 @@ class AISEO_Admin {
 		$posts = get_posts( [
 			'post_type'      => 'post',
 			'post_status'    => 'publish',
-			'posts_per_page' => 100,
+			'posts_per_page' => -1,
 			'orderby'        => 'date',
 			'order'          => 'DESC',
 		] );
