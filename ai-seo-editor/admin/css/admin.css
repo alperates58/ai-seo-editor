@@ -219,6 +219,7 @@
 .aiseo-criterion__body { flex: 1; }
 .aiseo-criterion__label { font-size: 13px; font-weight: 600; color: var(--aiseo-text); display: block; }
 .aiseo-criterion__message { font-size: 12px; color: var(--aiseo-text-muted); margin: 2px 0 0 0; }
+.aiseo-criterion__fix { margin-top: 8px !important; }
 
 /* ---- Tables ---- */
 .aiseo-table { width: 100%; border-collapse: collapse; font-size: 13px; }

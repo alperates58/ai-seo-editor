@@ -54,19 +54,19 @@ function aiseo_get_score_color( int $score ): string {
 
 function aiseo_get_score_label( int $score ): string {
 	if ( $score >= 80 ) {
-		return __( 'İyi', 'ai-seo-editor' );
+		return __( 'Iyi', 'ai-seo-editor' );
 	}
 	if ( $score >= 60 ) {
-		return __( 'Geliştirilebilir', 'ai-seo-editor' );
+		return __( 'Gelistirilebilir', 'ai-seo-editor' );
 	}
-	return __( 'Zayıf', 'ai-seo-editor' );
+	return __( 'Zayif', 'ai-seo-editor' );
 }
 
 function aiseo_score_badge( int $score ): string {
 	$color = aiseo_get_score_color( $score );
 	$label = aiseo_get_score_label( $score );
 	return sprintf(
-		'<span class="aiseo-badge aiseo-badge--%s">%d – %s</span>',
+		'<span class="aiseo-badge aiseo-badge--%s">%d - %s</span>',
 		esc_attr( $color ),
 		$score,
 		esc_html( $label )
@@ -77,7 +77,7 @@ function aiseo_get_first_paragraph( string $html ): string {
 	if ( preg_match( '/<p[^>]*>(.*?)<\/p>/is', $html, $matches ) ) {
 		return wp_strip_all_tags( $matches[1] );
 	}
-	$text = aiseo_strip_html( $html );
+	$text  = aiseo_strip_html( $html );
 	$paras = preg_split( '/\n\s*\n/', $text, 2 );
 	return $paras[0] ?? '';
 }
@@ -147,12 +147,74 @@ function aiseo_truncate( string $text, int $length = 160 ): string {
 	return mb_substr( $text, 0, $length - 3 ) . '...';
 }
 
+function aiseo_get_criterion_fix_action( array $criterion ): array {
+	$id = (string) ( $criterion['id'] ?? '' );
+
+	$operation_map = [
+		'keyword_in_title'            => 'optimize_title',
+		'keyword_in_meta_description' => 'optimize_meta',
+		'meta_description_length'     => 'optimize_meta',
+		'keyword_in_first_paragraph'  => 'improve_intro',
+		'keyword_density'             => 'improve_keyword_density',
+		'headings_structure'          => 'improve_structure',
+		'keyword_in_headings'         => 'improve_structure',
+		'image_alt_text'              => 'optimize_image_alts',
+		'sentence_length'             => 'improve_readability',
+		'paragraph_length'            => 'improve_readability',
+		'passive_voice'               => 'improve_readability',
+		'transition_words'            => 'improve_readability',
+		'consecutive_sentences'       => 'improve_readability',
+		'subheading_distribution'     => 'improve_structure',
+		'flesch_reading_ease'         => 'improve_readability',
+		'text_complexity'             => 'improve_readability',
+	];
+
+	if ( isset( $operation_map[ $id ] ) ) {
+		return [
+			'action'    => 'operation',
+			'operation' => $operation_map[ $id ],
+			'label'     => __( 'Duzelt', 'ai-seo-editor' ),
+		];
+	}
+
+	if ( in_array( $id, [ 'internal_links', 'content_length', 'focus_keyword_present' ], true ) ) {
+		return [
+			'action' => 'full',
+			'label'  => __( 'Duzelt', 'ai-seo-editor' ),
+		];
+	}
+
+	if ( in_array( $id, [ 'images_present', 'external_links', 'outbound_link_quality', 'keyword_in_url', 'schema_markup', 'canonical_tag', 'og_tags' ], true ) ) {
+		return [
+			'action' => 'unsupported',
+			'label'  => __( 'Duzelt', 'ai-seo-editor' ),
+			'reason' => __( 'Bu uyari icerik yerine eklenti ayari veya manuel baglanti gerektiriyor.', 'ai-seo-editor' ),
+		];
+	}
+
+	return [];
+}
+
 function aiseo_render_criterion( array $criterion ): string {
 	$status  = esc_attr( $criterion['status'] ?? 'error' );
+	$id      = esc_attr( $criterion['id'] ?? '' );
 	$label   = esc_html( $criterion['label'] ?? '' );
 	$message = esc_html( $criterion['message'] ?? '' );
-	$icons   = [ 'good' => '✓', 'warning' => '!', 'error' => '✗' ];
+	$icons   = [ 'good' => 'OK', 'warning' => '!', 'error' => 'x' ];
 	$icon    = $icons[ $criterion['status'] ?? 'error' ] ?? '?';
+	$fix     = aiseo_get_criterion_fix_action( $criterion );
+	$button  = '';
+
+	if ( ( $criterion['status'] ?? 'error' ) !== 'good' && ! empty( $fix['label'] ) ) {
+		$button = sprintf(
+			'<button type="button" class="button button-secondary button-small aiseo-criterion__fix" data-criterion-id="%1$s" data-fix-action="%2$s" data-operation="%3$s" data-reason="%4$s">%5$s</button>',
+			$id,
+			esc_attr( $fix['action'] ?? '' ),
+			esc_attr( $fix['operation'] ?? '' ),
+			esc_attr( $fix['reason'] ?? '' ),
+			esc_html( $fix['label'] )
+		);
+	}
 
 	return sprintf(
 		'<div class="aiseo-criterion aiseo-criterion--%s">
@@ -160,11 +222,13 @@ function aiseo_render_criterion( array $criterion ): string {
 			<div class="aiseo-criterion__body">
 				<strong class="aiseo-criterion__label">%s</strong>
 				<p class="aiseo-criterion__message">%s</p>
+				%s
 			</div>
 		</div>',
 		$status,
 		esc_html( $icon ),
 		$label,
-		$message
+		$message,
+		$button
 	);
 }

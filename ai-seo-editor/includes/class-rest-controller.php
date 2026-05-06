@@ -244,22 +244,32 @@ class AISEO_Rest_Controller {
 		$post    = get_post( $post_id );
 		$yoast   = new AISEO_Yoast_Integration();
 		$keyword = $yoast->get_focus_keyword( $post_id );
+		$title_input    = $request->has_param( 'title' ) ? sanitize_text_field( (string) $request->get_param( 'title' ) ) : ( $post instanceof WP_Post ? $post->post_title : '' );
+		$content_input  = $request->has_param( 'content' ) ? wp_kses_post( (string) $request->get_param( 'content' ) ) : ( $post instanceof WP_Post ? $post->post_content : '' );
+		$meta_input     = $request->has_param( 'meta' ) ? sanitize_textarea_field( (string) $request->get_param( 'meta' ) ) : $yoast->get_meta_description( $post_id );
+		$current_tags   = array_map( 'sanitize_text_field', (array) ( $request->get_param( 'current_tags' ) ?? wp_get_post_tags( $post_id, [ 'fields' => 'names' ] ) ) );
+		$include_internal_links = ! $request->has_param( 'include_internal_links' ) || (bool) $request->get_param( 'include_internal_links' );
+		$optimize_tags         = ! $request->has_param( 'optimize_tags' ) || (bool) $request->get_param( 'optimize_tags' );
 
 		if ( empty( $keyword ) && $post instanceof WP_Post ) {
-			$keyword = $post->post_title;
+			$keyword = $title_input ?: $post->post_title;
 		}
 
 		if ( empty( $keyword ) ) {
 			return new WP_Error( 'aiseo_missing_param', __( 'Tam duzeltme icin baslik veya odak kelime gereklidir.', 'ai-seo-editor' ), [ 'status' => 422 ] );
 		}
 
-		$content_before = $post instanceof WP_Post ? $post->post_content : '';
-		$title_before   = $post instanceof WP_Post ? $post->post_title : '';
-		$meta_before    = $yoast->get_meta_description( $post_id );
-
 		try {
 			$client = new AISEO_OpenAI_Client( $this->settings );
-			$result = $client->optimize_full_post( $post_id, $keyword, (string) $this->settings->get( 'default_tone' ) );
+			$result = $client->optimize_full_post(
+				$post_id,
+				$keyword,
+				(string) $this->settings->get( 'default_tone' ),
+				$content_input,
+				$title_input,
+				$meta_input,
+				$current_tags
+			);
 		} catch ( Throwable $e ) {
 			$this->logger->log_ai_operation(
 				$post_id,
@@ -287,12 +297,80 @@ class AISEO_Rest_Controller {
 			return new WP_Error( 'aiseo_optimize_error', $error, [ 'status' => 500 ] );
 		}
 
-		$title   = sanitize_text_field( $result['title'] ?? $title_before );
-		$meta    = sanitize_textarea_field( $result['meta_description'] ?? $meta_before );
-		$content = wp_kses_post( $result['content'] ?? $content_before );
+		$title   = sanitize_text_field( $result['title'] ?? $title_input );
+		$meta    = sanitize_textarea_field( $result['meta_description'] ?? $meta_input );
+		$content = wp_kses_post( $result['content'] ?? $content_input );
 		$tags    = array_map( 'sanitize_text_field', is_array( $result['suggested_tags'] ?? null ) ? $result['suggested_tags'] : [] );
-		$tags    = $this->filter_new_tags( $post_id, $tags, 3 );
+		$tags    = $optimize_tags ? $this->filter_new_tags( $post_id, $tags, 3 ) : [];
 		$tokens  = (int) ( $result['tokens_used'] ?? 0 );
+
+		$steps = [
+			[
+				'operation' => 'optimize_title',
+				'success'   => true,
+				'field'     => 'post_title',
+				'before'    => $title_input,
+				'after'     => $title,
+			],
+			[
+				'operation' => 'optimize_meta',
+				'success'   => true,
+				'field'     => 'meta',
+				'before'    => $meta_input,
+				'after'     => $meta,
+			],
+			[
+				'operation' => 'full_content_optimization',
+				'success'   => true,
+				'field'     => 'post_content',
+				'before'    => $content_input,
+				'after'     => $content,
+			],
+		];
+
+		if ( $optimize_tags ) {
+			$tag_result = $client->optimize_tags( $post_id, $keyword, $content, $current_tags );
+			$extra_tags = $this->clean_tag_list( is_array( $tag_result['tags'] ?? null ) ? $tag_result['tags'] : [], 8 );
+			if ( ! empty( $extra_tags ) ) {
+				$tags   = $extra_tags;
+				$tokens += (int) ( $tag_result['tokens_used'] ?? 0 );
+				$steps[] = [
+					'operation' => 'optimize_tags',
+					'success'   => true,
+					'field'     => 'tags',
+					'before'    => implode( ', ', $current_tags ),
+					'after'     => implode( ', ', $tags ),
+				];
+			}
+		}
+
+		if ( $include_internal_links ) {
+			$link_client   = new AISEO_OpenAI_Client( $this->settings );
+			$linker        = new AISEO_Internal_Linker( $link_client, $this->logger );
+			$suggestions   = $linker->find_suggestions( $post_id );
+			$suggestion_ids = array_map(
+				'absint',
+				array_filter(
+					array_map(
+						static fn( $item ) => $item['id'] ?? 0,
+						array_slice( is_array( $suggestions ) ? $suggestions : [], 0, 3 )
+					)
+				)
+			);
+			if ( ! empty( $suggestion_ids ) ) {
+				$linked_content = $linker->apply_suggestions( $post_id, $suggestion_ids, $content );
+				if ( ! empty( $linked_content ) && $linked_content !== $content ) {
+					$steps[] = [
+						'operation' => 'add_internal_links',
+						'success'   => true,
+						'field'     => 'post_content',
+						'before'    => $content,
+						'after'     => $linked_content,
+					];
+					$content = $linked_content;
+				}
+			}
+		}
 
 		$this->logger->log_ai_operation(
 			$post_id,
@@ -302,30 +380,6 @@ class AISEO_Rest_Controller {
 			$tokens,
 			'success'
 		);
-
-		$steps = [
-			[
-				'operation' => 'optimize_title',
-				'success'   => true,
-				'field'     => 'post_title',
-				'before'    => $title_before,
-				'after'     => $title,
-			],
-			[
-				'operation' => 'optimize_meta',
-				'success'   => true,
-				'field'     => 'meta',
-				'before'    => $meta_before,
-				'after'     => $meta,
-			],
-			[
-				'operation' => 'full_content_optimization',
-				'success'   => true,
-				'field'     => 'post_content',
-				'before'    => $content_before,
-				'after'     => $content,
-			],
-		];
 
 		return $this->ok(
 			[

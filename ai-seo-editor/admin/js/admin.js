@@ -50,7 +50,7 @@
 		analyzePost:      (pid, force) => API.request('/analyze/' + pid, 'POST', { force: !!force }),
 		getAnalysis:      (pid)        => API.request('/analyze/' + pid),
 		optimize:         (pid, op)    => API.request('/optimize', 'POST', { post_id: pid, operation: op }),
-		fullOptimize:     (pid)        => API.request('/optimize/full', 'POST', { post_id: pid }),
+		fullOptimize:     (pid, data)  => API.request('/optimize/full', 'POST', Object.assign({ post_id: pid }, data || {})),
 		agentOptimize:    (data)       => API.request('/agent/optimize', 'POST', data),
 		agentApply:       (data)       => API.request('/agent/apply', 'POST', data),
 		regeneratePost:   (pid)        => API.request('/regenerate/' + pid, 'POST'),
@@ -262,9 +262,93 @@
 	/* ------------------------------------------------------------------ */
 	/* Post Detail — Optimize Buttons                                      */
 	/* ------------------------------------------------------------------ */
+	function getCriterionFixConfig(criterionId) {
+		const operationMap = {
+			keyword_in_title: 'optimize_title',
+			keyword_in_meta_description: 'optimize_meta',
+			meta_description_length: 'optimize_meta',
+			keyword_in_first_paragraph: 'improve_intro',
+			keyword_density: 'improve_keyword_density',
+			headings_structure: 'improve_structure',
+			keyword_in_headings: 'improve_structure',
+			image_alt_text: 'optimize_image_alts',
+			sentence_length: 'improve_readability',
+			paragraph_length: 'improve_readability',
+			passive_voice: 'improve_readability',
+			transition_words: 'improve_readability',
+			consecutive_sentences: 'improve_readability',
+			subheading_distribution: 'improve_structure',
+			flesch_reading_ease: 'improve_readability',
+			text_complexity: 'improve_readability',
+		};
+
+		if (operationMap[criterionId]) {
+			return { type: 'operation', operation: operationMap[criterionId] };
+		}
+		if (['internal_links', 'content_length', 'focus_keyword_present'].includes(criterionId)) {
+			return { type: 'full' };
+		}
+		return {
+			type: 'unsupported',
+			reason: 'Bu uyari icerikten cok eklenti ayari veya manuel baglanti gerektiriyor.',
+		};
+	}
+
+	function getEditorMetaValue(postId) {
+		const selectors = [
+			'#yoast_wpseo_metadesc',
+			'#_yoast_wpseo_metadesc',
+			'textarea[name="yoast_wpseo_metadesc"]',
+			'textarea[name="_yoast_wpseo_metadesc"]',
+			'#rank_math_description',
+			'textarea[name="rank_math_description"]',
+			'#aioseo-post-settings-description',
+			'textarea[name="aioseo_description"]'
+		];
+
+		for (const selector of selectors) {
+			const field = document.querySelector(selector);
+			if (field && 'value' in field && String(field.value || '').trim()) {
+				return String(field.value || '').trim();
+			}
+		}
+
+		return localStorage.getItem('aiseo_pending_meta_' + (postId || Config.postId)) || '';
+	}
+
+	function getFullOptimizePayload(postId) {
+		return {
+			title: document.getElementById('title')?.value || '',
+			content: getEditorContent(),
+			meta: getEditorMetaValue(postId),
+			current_tags: getCurrentEditorTags(),
+			include_internal_links: true,
+			optimize_tags: true,
+		};
+	}
+
+	function getDetailOperationLabel(operation) {
+		return {
+			optimize_title: 'Baslik Iyilestirme',
+			optimize_meta: 'Meta Aciklama',
+			improve_intro: 'Giris Paragraflari',
+			improve_structure: 'Baslik Yapisi',
+			improve_readability: 'Okunabilirlik',
+			improve_keyword_density: 'Keyword Yogunlugu',
+			add_faq: 'FAQ Bolumu',
+			improve_conclusion: 'Sonuc Bolumu',
+			optimize_image_alts: 'Gorsel Alt Metinleri',
+			add_internal_links: 'Ic Linkler',
+			optimize_tags: 'Etiketler',
+			full_content_optimization: 'Tam Icerik Revizyonu',
+		}[operation] || 'AI Onerisi';
+	}
+
 	function initPostDetailOptimize() {
 		const detailWrap = document.getElementById('aiseo-post-detail');
 		if (!detailWrap) return;
+		if (detailWrap.dataset.aiseoInit === '1') return;
+		detailWrap.dataset.aiseoInit = '1';
 		const postId = detailWrap.dataset.postId;
 
 		document.querySelectorAll('.aiseo-btn-optimize').forEach((btn) => {
@@ -311,6 +395,83 @@
 					UI.spin(loadingEl, false);
 				}
 			});
+		});
+
+		detailWrap.addEventListener('click', async (event) => {
+			const button = event.target.closest('.aiseo-criterion__fix');
+			if (!button) return;
+
+			event.preventDefault();
+			const fixAction = button.dataset.fixAction || '';
+			const operation = button.dataset.operation || '';
+			const reason = button.dataset.reason || '';
+			const loadingEl = document.getElementById('aiseo-optimize-loading');
+
+			if (fixAction === 'unsupported') {
+				UI.notice('aiseo-posts-notice', reason || 'Bu uyari manuel ayar gerektiriyor.', 'warning');
+				return;
+			}
+
+			UI.loading(button, true);
+			UI.spin(loadingEl, true);
+			try {
+				if (fixAction === 'operation' && operation) {
+					const res = await API.optimize(postId, operation);
+					const data = res.data || {};
+					UI.showModal({
+						title:  getDetailOperationLabel(operation),
+						before: data.before || '',
+						after:  data.after  || '',
+						onApply: async () => {
+							try {
+								await API.applyOptimize({
+									post_id:   parseInt(postId),
+									operation: operation,
+									field:     data.field     || 'post_content',
+									meta_key:  data.meta_key  || '',
+									new_value: data.after     || '',
+								});
+								UI.notice('aiseo-posts-notice', 'Degisiklik uygulandi. Yaziyi yeniden analiz etmek iyi olur.', 'success');
+							} catch (e) {
+								UI.notice('aiseo-posts-notice', e.message || i18n.error, 'error');
+							}
+						},
+					});
+					return;
+				}
+
+				if (fixAction === 'full') {
+					const res = await API.fullOptimize(postId, {
+						include_internal_links: true,
+						optimize_tags: true,
+					});
+					const data = res.data || {};
+					UI.showModal({
+						title: 'Tam Duzeltme',
+						before: data.steps?.find((step) => step.operation === 'full_content_optimization')?.before || '',
+						after:  data.content || '',
+						onApply: async () => {
+							try {
+								await API.agentApply({
+									post_id: postId,
+									title: data.title || '',
+									content: data.content || '',
+									meta: data.meta || '',
+									tags: data.tags || [],
+								});
+								UI.notice('aiseo-posts-notice', 'Tam duzeltme uygulandi. Yaziyi yeniden analiz etmek iyi olur.', 'success');
+							} catch (e) {
+								UI.notice('aiseo-posts-notice', e.message || i18n.error, 'error');
+							}
+						},
+					});
+				}
+			} catch (e) {
+				UI.notice('aiseo-posts-notice', e.message || i18n.error, 'error');
+			} finally {
+				UI.loading(button, false);
+				UI.spin(loadingEl, false);
+			}
 		});
 	}
 
@@ -791,6 +952,33 @@
 				return;
 			}
 
+			if (button.classList.contains('aiseo-criterion__fix')) {
+				event.preventDefault();
+				const criterionId = button.dataset.criterionId || '';
+				const config = getCriterionFixConfig(criterionId);
+
+				if (config.type === 'unsupported') {
+					UI.notice('aiseo-editor-notice', config.reason || 'Bu uyari manuel ayar gerektiriyor.', 'warning');
+					return;
+				}
+
+				UI.loading(button, true);
+				try {
+					if (config.type === 'operation' && config.operation) {
+						const res = await API.optimize(postId, config.operation);
+						renderEditorSuggestion(preview, res.data || {});
+					} else if (config.type === 'full') {
+						const res = await API.fullOptimize(postId, getFullOptimizePayload(postId));
+						renderEditorFullSuggestion(preview, res.data || {});
+					}
+				} catch (e) {
+					UI.notice('aiseo-editor-notice', e.message || i18n.error, 'error');
+				} finally {
+					UI.loading(button, false);
+				}
+				return;
+			}
+
 			if (button.classList.contains('aiseo-editor-optimize')) {
 				event.preventDefault();
 				UI.loading(button, true);
@@ -810,7 +998,7 @@
 				if (!confirm('Başlık, meta, SEO ve okunabilirlik dengeli şekilde iyileştirilsin mi? Mevcut FAQ/etiketler tekrar eklenmez; değişiklikler editöre aktarılacak, kaydı siz yapacaksınız.')) return;
 				UI.loading(button, true);
 				try {
-					const res = await API.fullOptimize(postId);
+					const res = await API.fullOptimize(postId, getFullOptimizePayload(postId));
 					renderEditorFullSuggestion(preview, res.data || {});
 				} catch (e) {
 					UI.notice('aiseo-editor-notice', e.message || i18n.error, 'error');
@@ -1138,7 +1326,7 @@
 				if (!confirm('Başlık, meta, SEO ve okunabilirlik dengeli şekilde iyileştirilsin mi? Mevcut FAQ/etiketler tekrar eklenmez; değişiklikler editöre aktarılacak, kaydı siz yapacaksınız.')) return;
 				UI.loading(fixAllBtn, true);
 				try {
-					const res = await API.fullOptimize(postId);
+					const res = await API.fullOptimize(postId, getFullOptimizePayload(postId));
 					renderEditorFullSuggestion(preview, res.data || {});
 				} catch (e) {
 					UI.notice('aiseo-editor-notice', e.message || i18n.error, 'error');
@@ -1206,7 +1394,10 @@
 		const good     = criteria.filter((c) => c.status === 'good').length;
 		const rows = criteria.map((c) => {
 			const cls = c.status === 'good' ? 'is-ok' : c.status === 'warning' ? 'is-warn' : 'is-error';
-			return '<li class="' + cls + '">' + escapeHtml(c.label + ': ' + c.message) + '</li>';
+			const button = c.status !== 'good'
+				? '<button type="button" class="button button-small button-secondary aiseo-criterion__fix" data-criterion-id="' + escapeHtml(c.id || '') + '">Duzelt</button>'
+				: '';
+			return '<li class="' + cls + '"><div>' + escapeHtml(c.label + ': ' + c.message) + '</div>' + button + '</li>';
 		}).join('');
 		container.innerHTML = '<div class="aiseo-editor-suggestion">' +
 			'<h4>Analiz Sonuçları</h4>' +

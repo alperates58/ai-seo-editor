@@ -345,23 +345,23 @@ class AISEO_OpenAI_Client {
 		];
 	}
 
-	public function optimize_full_post( int $post_id, string $keyword, string $tone ): array {
+	public function optimize_full_post( int $post_id, string $keyword, string $tone, string $content_override = '', string $title_override = '', string $meta_override = '', array $current_tags = [] ): array {
 		$post = get_post( $post_id );
 		if ( ! $post instanceof WP_Post ) {
 			return [];
 		}
 
 		$yoast   = new AISEO_Yoast_Integration();
-		$content = $post->post_content ?? '';
+		$content = $content_override !== '' ? $content_override : ( $post->post_content ?? '' );
 		$locked  = $this->protect_bracket_blocks( $content );
 		$current = [
-			'title'            => get_the_title( $post_id ),
-			'meta_description' => $yoast->get_meta_description( $post_id ),
+			'title'            => $title_override !== '' ? $title_override : get_the_title( $post_id ),
+			'meta_description' => $meta_override !== '' ? $meta_override : $yoast->get_meta_description( $post_id ),
 			'word_count'       => aiseo_count_words( $content ),
 			'keyword_density'  => aiseo_keyword_density( $content, $keyword ),
 			'has_faq'          => $this->content_has_faq( $content ),
 			'has_conclusion'   => $this->content_has_conclusion( $content ),
-			'existing_tags'    => wp_get_post_tags( $post_id, [ 'fields' => 'names' ] ),
+			'existing_tags'    => ! empty( $current_tags ) ? $current_tags : wp_get_post_tags( $post_id, [ 'fields' => 'names' ] ),
 		];
 
 		$messages = [
