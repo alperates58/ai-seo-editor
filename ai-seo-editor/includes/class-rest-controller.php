@@ -462,6 +462,10 @@ class AISEO_Rest_Controller {
 		}
 
 		$post = get_post( $post_id );
+		$content = aiseo_preserve_bracket_blocks(
+			$post instanceof WP_Post ? (string) $post->post_content : '',
+			$content
+		);
 		if ( $post instanceof WP_Post && post_type_supports( $post->post_type, 'revisions' ) ) {
 			wp_save_post_revision( $post_id );
 		}
@@ -739,6 +743,10 @@ class AISEO_Rest_Controller {
 		$client  = new AISEO_OpenAI_Client( $this->settings );
 		$linker  = new AISEO_Internal_Linker( $client, $this->logger );
 		$new_content = $linker->apply_suggestions( $post_id, $suggestion_ids, $content );
+		$new_content = aiseo_preserve_bracket_blocks(
+			(string) get_post_field( 'post_content', $post_id ),
+			(string) $new_content
+		);
 
 		if ( empty( $new_content ) ) {
 			return new WP_Error( 'aiseo_apply_error', __( 'İç linkler hazırlanamadı.', 'ai-seo-editor' ), [ 'status' => 500 ] );
@@ -895,22 +903,7 @@ class AISEO_Rest_Controller {
 	}
 
 	private function preserve_bracket_blocks( string $source, string $target ): string {
-		if ( ! preg_match_all( '/\[[^\[\]\r\n]{1,800}\]/u', $source, $matches ) ) {
-			return $target;
-		}
-
-		$missing = [];
-		foreach ( array_unique( $matches[0] ) as $block ) {
-			if ( strpos( $target, $block ) === false ) {
-				$missing[] = $block;
-			}
-		}
-
-		if ( empty( $missing ) ) {
-			return $target;
-		}
-
-		return implode( "\n\n", $missing ) . "\n\n" . $target;
+		return aiseo_preserve_bracket_blocks( $source, $target );
 	}
 
 	private function not_found(): WP_Error {

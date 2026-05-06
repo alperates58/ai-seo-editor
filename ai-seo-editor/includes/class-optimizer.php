@@ -78,13 +78,17 @@ class AISEO_Optimizer {
 				] );
 
 			case 'post_content':
+				$new_value = aiseo_preserve_bracket_blocks( $post->post_content ?? '', $new_value );
 				return (bool) wp_update_post( [
 					'ID'           => $post_id,
 					'post_content' => wp_kses_post( $new_value ),
 				] );
 
 			case 'append_content':
-				$updated = $post->post_content . "\n\n" . wp_kses_post( $new_value );
+				$updated = aiseo_preserve_bracket_blocks(
+					$post->post_content ?? '',
+					$post->post_content . "\n\n" . wp_kses_post( $new_value )
+				);
 				return (bool) wp_update_post( [
 					'ID'           => $post_id,
 					'post_content' => $updated,
@@ -108,6 +112,7 @@ class AISEO_Optimizer {
 				if ( $new_content === $content ) {
 					$new_content = '<p>' . esc_html( $new_value ) . '</p>' . "\n\n" . $content;
 				}
+				$new_content = aiseo_preserve_bracket_blocks( $content ?? '', (string) $new_content );
 				return (bool) wp_update_post( [
 					'ID'           => $post_id,
 					'post_content' => wp_kses_post( $new_content ),

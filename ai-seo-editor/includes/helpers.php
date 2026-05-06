@@ -147,6 +147,25 @@ function aiseo_truncate( string $text, int $length = 160 ): string {
 	return mb_substr( $text, 0, $length - 3 ) . '...';
 }
 
+function aiseo_preserve_bracket_blocks( string $source, string $target ): string {
+	if ( ! preg_match_all( '/\[[^\[\]\r\n]{1,800}\]/u', $source, $matches ) ) {
+		return $target;
+	}
+
+	$missing = [];
+	foreach ( array_unique( $matches[0] ) as $block ) {
+		if ( strpos( $target, $block ) === false ) {
+			$missing[] = $block;
+		}
+	}
+
+	if ( empty( $missing ) ) {
+		return $target;
+	}
+
+	return implode( "\n\n", $missing ) . "\n\n" . $target;
+}
+
 function aiseo_get_criterion_fix_action( array $criterion ): array {
 	$id = (string) ( $criterion['id'] ?? '' );
 

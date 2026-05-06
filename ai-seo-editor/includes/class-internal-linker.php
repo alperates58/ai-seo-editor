@@ -220,7 +220,7 @@ class AISEO_Internal_Linker {
 			$content = $this->append_related_links_section( $content, $appended_links );
 		}
 
-		return $content;
+		return aiseo_preserve_bracket_blocks( $source_content ?? $post->post_content, $content );
 	}
 
 	private function has_internal_link( string $content ): bool {
@@ -289,13 +289,13 @@ class AISEO_Internal_Linker {
 	}
 
 	private function replace_first_unlinked_text( string $html, string $needle, string $replacement ): string {
-		$parts = preg_split( '/(<a\b[^>]*>.*?<\/a>)/is', $html, -1, PREG_SPLIT_DELIM_CAPTURE );
+		$parts = preg_split( '/(<a\b[^>]*>.*?<\/a>|\[[^\[\]\r\n]{1,800}\])/is', $html, -1, PREG_SPLIT_DELIM_CAPTURE );
 		if ( ! is_array( $parts ) ) {
 			return $html;
 		}
 
 		foreach ( $parts as $index => $part ) {
-			if ( preg_match( '/^<a\b/i', $part ) ) {
+			if ( preg_match( '/^(<a\b|\[[^\[\]\r\n]{1,800}\]$)/i', $part ) ) {
 				continue;
 			}
 
