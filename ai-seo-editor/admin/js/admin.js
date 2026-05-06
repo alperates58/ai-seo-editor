@@ -14,22 +14,38 @@
 	/* API Module                                                           */
 	/* ------------------------------------------------------------------ */
 	const API = {
-		async request(endpoint, method, body) {
+		async request(endpoint, method, body, opts) {
+			const timeout = opts?.timeout || 0;
+			const controller = timeout && window.AbortController ? new AbortController() : null;
+			let timer = null;
 			const options = {
 				method:  method || 'GET',
 				headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': nonce },
 			};
-			if (body) options.body = JSON.stringify(body);
-			const res = await fetch(restUrl + 'aiseo/v1' + endpoint, options);
-			const text = await res.text();
-			let json = {};
-			try {
-				json = text ? JSON.parse(text) : {};
-			} catch (e) {
-				json = { message: text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() };
+			if (controller) {
+				options.signal = controller.signal;
+				timer = setTimeout(() => controller.abort(), timeout);
 			}
-			if (!res.ok) throw json;
-			return json;
+			if (body) options.body = JSON.stringify(body);
+			try {
+				const res = await fetch(restUrl + 'aiseo/v1' + endpoint, options);
+				const text = await res.text();
+				let json = {};
+				try {
+					json = text ? JSON.parse(text) : {};
+				} catch (e) {
+					json = { message: text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() };
+				}
+				if (!res.ok) throw json;
+				return json;
+			} catch (e) {
+				if (e?.name === 'AbortError') {
+					throw { message: 'Istek zaman asimina ugradi. Listeyi yenile ile tekrar deneyin.' };
+				}
+				throw e;
+			} finally {
+				if (timer) clearTimeout(timer);
+			}
 		},
 		analyzePost:      (pid, force) => API.request('/analyze/' + pid, 'POST', { force: !!force }),
 		getAnalysis:      (pid)        => API.request('/analyze/' + pid),
@@ -42,7 +58,7 @@
 		bulkAnalyze:      (ids)        => API.request('/bulk-analyze', 'POST', { post_ids: ids }),
 		generateArticle:  (params)     => API.request('/generate', 'POST', params),
 		createDraft:      (data)       => API.request('/generate/create-draft', 'POST', data),
-		getLinklessPosts: ()           => API.request('/links/missing?limit=100'),
+		getLinklessPosts: ()           => API.request('/links/missing?limit=50', 'GET', null, { timeout: 25000 }),
 		getLinks:         (pid)        => API.request('/links/' + pid),
 		computeLinks:     (pid)        => API.request('/links/' + pid + '/compute', 'POST'),
 		applyLinks:       (pid, ids, content, autoSave) => {
@@ -263,6 +279,11 @@
 		}
 
 		if (filter) {
+			const params = new URLSearchParams(window.location.search);
+			const initialFilter = params.get('score_filter');
+			if (initialFilter) {
+				filter.value = initialFilter;
+			}
 			filter.addEventListener('change', () => {
 				const val = filter.value;
 				document.querySelectorAll('#aiseo-bulk-table tbody tr').forEach((row) => {
@@ -271,6 +292,9 @@
 					row.style.display = (color === val) ? '' : 'none';
 				});
 			});
+			if (filter.value) {
+				filter.dispatchEvent(new Event('change'));
+			}
 		}
 
 		if (search) {
@@ -585,7 +609,8 @@
 			const res = await API.getLinklessPosts();
 			renderLinklessPosts(tbody, res.data?.posts || []);
 		} catch (e) {
-			tbody.innerHTML = '<tr><td colspan="6" class="aiseo-empty">' + escapeHtml(e.message || i18n.error) + '</td></tr>';
+			tbody.innerHTML = '<tr><td colspan="6" class="aiseo-empty">' + escapeHtml(e.message || i18n.error) + '<br><button type="button" class="button" id="aiseo-linkless-retry">Tekrar Dene</button></td></tr>';
+			document.getElementById('aiseo-linkless-retry')?.addEventListener('click', () => loadLinklessPosts(tbody, btn));
 		} finally {
 			if (btn) UI.loading(btn, false);
 		}
@@ -1627,8 +1652,63 @@
 	/* Dashboard                                                            */
 	/* ------------------------------------------------------------------ */
 	function initDashboard() {
-		// Dashboard stats are server-rendered; no JS needed unless live refresh.
-		// Future enhancement: poll for updated stats.
+		const refreshBtn = document.getElementById('aiseo-refresh-all-analyses');
+		if (!refreshBtn) return;
+
+		refreshBtn.addEventListener('click', async () => {
+			let postIds = [];
+			try {
+				postIds = JSON.parse(refreshBtn.dataset.postIds || '[]')
+					.map((id) => parseInt(id))
+					.filter((id) => Number.isFinite(id) && id > 0);
+			} catch (e) {
+				postIds = [];
+			}
+
+			if (!postIds.length) {
+				UI.notice('aiseo-dashboard-notice', 'Analiz edilecek yayinlanmis yazi bulunamadi.', 'warning');
+				return;
+			}
+
+			if (!confirm(postIds.length + ' yazinin analizini yenileyeyim mi? Bu islem icerik sayisina gore zaman alabilir.')) return;
+
+			const progressWrap = document.getElementById('aiseo-dashboard-refresh-progress');
+			const progressBar = document.getElementById('aiseo-dashboard-progress-bar');
+			const statusEl = document.getElementById('aiseo-dashboard-progress-status');
+			const batchSize = 10;
+			let processed = 0;
+			let succeeded = 0;
+			let failed = 0;
+
+			UI.loading(refreshBtn, true);
+			UI.spin(progressWrap, true);
+			if (progressBar) progressBar.style.width = '0%';
+			if (statusEl) statusEl.textContent = '0 / ' + postIds.length;
+
+			for (let i = 0; i < postIds.length; i += batchSize) {
+				const batch = postIds.slice(i, i + batchSize);
+				try {
+					const res = await API.bulkAnalyze(batch);
+					const results = res.data?.results || [];
+					results.forEach((item) => {
+						if (item.success) succeeded++;
+						else failed++;
+					});
+					processed += batch.length;
+				} catch (e) {
+					processed += batch.length;
+					failed += batch.length;
+				}
+
+				const pct = Math.round((processed / postIds.length) * 100);
+				if (progressBar) progressBar.style.width = pct + '%';
+				if (statusEl) statusEl.textContent = processed + ' / ' + postIds.length;
+			}
+
+			UI.loading(refreshBtn, false);
+			UI.notice('aiseo-dashboard-notice', 'Analiz yenileme tamamlandi. Basarili: ' + succeeded + ', hata: ' + failed + '.', failed ? 'warning' : 'success');
+			setTimeout(() => window.location.reload(), 900);
+		});
 	}
 
 	/* ------------------------------------------------------------------ */

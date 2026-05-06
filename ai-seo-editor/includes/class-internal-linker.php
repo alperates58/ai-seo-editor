@@ -253,11 +253,12 @@ class AISEO_Internal_Linker {
 			'post_status'    => 'publish',
 			'posts_per_page' => 1,
 			'fields'         => 'ids',
+			'no_found_rows'  => true,
 			'post__not_in'   => [ $post_id ],
 			'category__in'   => $category_ids,
 		] );
 
-		return (int) $query->found_posts;
+		return (int) $query->post_count;
 	}
 
 	private function category_names( array $category_ids ): string {

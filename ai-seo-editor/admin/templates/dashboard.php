@@ -3,12 +3,32 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 /** @var array $stats */
+/** @var int[] $all_post_ids */
+$all_post_ids = array_map( 'absint', $all_post_ids ?? [] );
 ?>
 <div class="wrap aiseo-wrap">
-	<h1 class="aiseo-page-title">
-		<span class="dashicons dashicons-chart-area"></span>
-		<?php esc_html_e( 'AI SEO Editor — Dashboard', 'ai-seo-editor' ); ?>
-	</h1>
+	<div class="aiseo-page-heading">
+		<h1 class="aiseo-page-title">
+			<span class="dashicons dashicons-chart-area"></span>
+			<?php esc_html_e( 'AI SEO Editor — Dashboard', 'ai-seo-editor' ); ?>
+		</h1>
+		<button
+			type="button"
+			id="aiseo-refresh-all-analyses"
+			class="button button-primary"
+			data-post-ids="<?php echo esc_attr( wp_json_encode( $all_post_ids ) ); ?>"
+		>
+			<?php esc_html_e( 'Tüm Analizleri Yenile', 'ai-seo-editor' ); ?>
+		</button>
+	</div>
+
+	<div id="aiseo-dashboard-notice"></div>
+	<div id="aiseo-dashboard-refresh-progress" class="aiseo-card aiseo-dashboard-progress" style="display:none">
+		<div class="aiseo-progress-bar">
+			<div class="aiseo-progress-fill" id="aiseo-dashboard-progress-bar" style="width:0%"></div>
+		</div>
+		<span id="aiseo-dashboard-progress-status"></span>
+	</div>
 
 	<?php if ( ! AISEO_Plugin::get_instance()->get_settings()->get_api_key() ) : ?>
 	<div class="aiseo-notice aiseo-notice--warning">
@@ -21,44 +41,44 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 	<!-- Skor Özet Kartları -->
 	<div class="aiseo-grid aiseo-grid--4">
-		<div class="aiseo-card aiseo-card--stat">
+		<a class="aiseo-card aiseo-card--stat aiseo-card--clickable" href="<?php echo esc_url( admin_url( 'admin.php?page=aiseo-posts' ) ); ?>">
 			<div class="aiseo-stat__icon dashicons dashicons-admin-post"></div>
 			<div class="aiseo-stat__value"><?php echo esc_html( $stats['total_posts'] ); ?></div>
 			<div class="aiseo-stat__label"><?php esc_html_e( 'Toplam Yazı', 'ai-seo-editor' ); ?></div>
-		</div>
-		<div class="aiseo-card aiseo-card--stat aiseo-card--green">
+		</a>
+		<a class="aiseo-card aiseo-card--stat aiseo-card--green aiseo-card--clickable" href="<?php echo esc_url( admin_url( 'admin.php?page=aiseo-bulk&score_filter=green' ) ); ?>">
 			<div class="aiseo-stat__icon dashicons dashicons-yes-alt"></div>
 			<div class="aiseo-stat__value"><?php echo esc_html( $stats['green'] ); ?></div>
 			<div class="aiseo-stat__label"><?php esc_html_e( 'İyi SEO (80+)', 'ai-seo-editor' ); ?></div>
-		</div>
-		<div class="aiseo-card aiseo-card--stat aiseo-card--orange">
+		</a>
+		<a class="aiseo-card aiseo-card--stat aiseo-card--orange aiseo-card--clickable" href="<?php echo esc_url( admin_url( 'admin.php?page=aiseo-bulk&score_filter=orange' ) ); ?>">
 			<div class="aiseo-stat__icon dashicons dashicons-warning"></div>
 			<div class="aiseo-stat__value"><?php echo esc_html( $stats['yellow'] ); ?></div>
 			<div class="aiseo-stat__label"><?php esc_html_e( 'Geliştirilebilir (60-79)', 'ai-seo-editor' ); ?></div>
-		</div>
-		<div class="aiseo-card aiseo-card--stat aiseo-card--red">
+		</a>
+		<a class="aiseo-card aiseo-card--stat aiseo-card--red aiseo-card--clickable" href="<?php echo esc_url( admin_url( 'admin.php?page=aiseo-bulk&score_filter=red' ) ); ?>">
 			<div class="aiseo-stat__icon dashicons dashicons-dismiss"></div>
 			<div class="aiseo-stat__value"><?php echo esc_html( $stats['red'] ); ?></div>
 			<div class="aiseo-stat__label"><?php esc_html_e( 'Zayıf SEO (&lt;60)', 'ai-seo-editor' ); ?></div>
-		</div>
+		</a>
 	</div>
 
 	<div class="aiseo-grid aiseo-grid--3" style="margin-top:20px">
-		<div class="aiseo-card aiseo-card--stat">
+		<a class="aiseo-card aiseo-card--stat aiseo-card--clickable" href="<?php echo esc_url( admin_url( 'admin.php?page=aiseo-bulk' ) ); ?>">
 			<div class="aiseo-stat__icon dashicons dashicons-chart-bar"></div>
 			<div class="aiseo-stat__value"><?php echo esc_html( $stats['avg_seo'] ); ?></div>
 			<div class="aiseo-stat__label"><?php esc_html_e( 'Ort. SEO Puanı', 'ai-seo-editor' ); ?></div>
-		</div>
-		<div class="aiseo-card aiseo-card--stat">
+		</a>
+		<a class="aiseo-card aiseo-card--stat aiseo-card--clickable" href="<?php echo esc_url( admin_url( 'admin.php?page=aiseo-bulk' ) ); ?>">
 			<div class="aiseo-stat__icon dashicons dashicons-editor-paragraph"></div>
 			<div class="aiseo-stat__value"><?php echo esc_html( $stats['avg_readability'] ); ?></div>
 			<div class="aiseo-stat__label"><?php esc_html_e( 'Ort. Okunabilirlik', 'ai-seo-editor' ); ?></div>
-		</div>
-		<div class="aiseo-card aiseo-card--stat">
+		</a>
+		<a class="aiseo-card aiseo-card--stat aiseo-card--clickable" href="<?php echo esc_url( admin_url( 'admin.php?page=aiseo-logs' ) ); ?>">
 			<div class="aiseo-stat__icon dashicons dashicons-editor-quote"></div>
 			<div class="aiseo-stat__value"><?php echo esc_html( number_format( $stats['monthly_tokens'] ) ); ?></div>
 			<div class="aiseo-stat__label"><?php esc_html_e( 'Bu Ay Token', 'ai-seo-editor' ); ?></div>
-		</div>
+		</a>
 	</div>
 
 	<div class="aiseo-grid aiseo-grid--2" style="margin-top:20px">

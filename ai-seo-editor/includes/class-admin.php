@@ -249,7 +249,15 @@ class AISEO_Admin {
 			wp_die( esc_html__( 'Yetkiniz yok.', 'ai-seo-editor' ) );
 		}
 		$stats = $this->logger->get_dashboard_stats();
-		$this->render_template( 'dashboard', [ 'stats' => $stats ] );
+		$all_post_ids = get_posts( [
+			'post_type'      => 'post',
+			'post_status'    => 'publish',
+			'posts_per_page' => -1,
+			'fields'         => 'ids',
+			'orderby'        => 'date',
+			'order'          => 'DESC',
+		] );
+		$this->render_template( 'dashboard', [ 'stats' => $stats, 'all_post_ids' => $all_post_ids ] );
 	}
 
 	public function page_posts_analysis(): void {
