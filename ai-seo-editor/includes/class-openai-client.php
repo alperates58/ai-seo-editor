@@ -44,7 +44,11 @@ class AISEO_OpenAI_Client {
 			'max_tokens'  => $max_tokens ?? $this->max_tokens,
 		];
 
-		if ( $json_mode && ! $this->is_deepseek ) {
+		if ( $this->is_deepseek && $this->model !== 'deepseek-reasoner' ) {
+			$payload['thinking'] = [ 'type' => 'disabled' ];
+		}
+
+		if ( $json_mode ) {
 			$payload['response_format'] = [ 'type' => 'json_object' ];
 		}
 
@@ -371,45 +375,24 @@ class AISEO_OpenAI_Client {
 			],
 		];
 
-		$response = $this->chat_completion( $messages, min( 3800, max( 2200, $this->max_tokens ) ), 0.55, true );
-		$parsed   = $this->parse_json_response( $response['content'] ?? '' );
-		$article_content = $this->extract_article_output( (string) ( $response['content'] ?? '' ) );
-		if ( $article_content !== '' ) {
-			$parsed['content'] = $article_content;
-			$parsed['title'] = $parsed['title'] ?? $current['title'];
-			$parsed['meta_description'] = $parsed['meta_description'] ?? $current['meta_description'];
-			$parsed['suggested_tags'] = $parsed['suggested_tags'] ?? [];
-		}
+		$minimum_word_count = min( 300, max( 120, (int) floor( (int) $current['word_count'] * 0.4 ) ) );
+		$response           = $this->chat_completion( $messages, min( 6000, max( 3200, $this->max_tokens ) ), 0.55, false );
+		$parsed             = $this->parse_full_post_response( $response, $current, $locked['blocks'], $minimum_word_count );
 
 		if ( empty( $parsed['content'] ) ) {
-			$fallback_content = $this->extract_html_fallback( (string) ( $response['content'] ?? '' ) );
-			if ( $fallback_content !== '' ) {
-				$parsed = array_merge(
-					[
-						'title'            => $current['title'],
-						'meta_description' => $current['meta_description'],
-						'suggested_tags'    => [],
-					],
-					$parsed,
-					[ 'content' => $fallback_content ]
-				);
-			} else {
-				$parsed['error'] = 'AI yaniti JSON olarak okunamadi veya content alani bos dondu.';
-			}
-		}
+			$retry_messages = $messages;
+			$retry_messages[] = [
+				'role'    => 'user',
+				'content' => "Onceki yanit uygulanabilir WordPress HTML icerik degildi. Simdi yalnizca <article data-aiseo-output=\"1\">...</article> dondur. En az {$minimum_word_count} kelime temiz icerik yaz; analiz, JSON, markdown, not, ozur veya aciklama yazma.",
+			];
 
-		if ( ! empty( $parsed['content'] ) ) {
-			$clean_content = $this->clean_model_html( (string) $parsed['content'] );
-			$generated_word_count = aiseo_count_words( $clean_content );
-			$minimum_word_count = min( 300, max( 120, (int) floor( (int) $current['word_count'] * 0.4 ) ) );
-			if ( $this->looks_like_analysis_dump( $clean_content ) || $this->looks_like_raw_json_dump( $clean_content ) ) {
-				unset( $parsed['content'] );
-				$parsed['error'] = 'AI yaniti temiz icerik yerine analiz/JSON metni dondurdu. Icerik uygulanmadi.';
-			} elseif ( $generated_word_count < $minimum_word_count ) {
-				unset( $parsed['content'] );
-				$parsed['error'] = 'AI yaniti cok kisa dondu. Icerik uygulanmadi.';
-			} else {
-				$parsed['content'] = $this->restore_bracket_blocks( $clean_content, $locked['blocks'] );
+			$retry_response = $this->chat_completion( $retry_messages, min( 7000, max( 4200, $this->max_tokens ) ), 0.5, false );
+			$retry_parsed   = $this->parse_full_post_response( $retry_response, $current, $locked['blocks'], $minimum_word_count );
+
+			if ( ! empty( $retry_parsed['content'] ) ) {
+				$parsed = $retry_parsed;
+				$response['total_tokens'] = (int) ( $response['total_tokens'] ?? 0 ) + (int) ( $retry_response['total_tokens'] ?? 0 );
+				$response['content'] = $retry_response['content'] ?? '';
 			}
 		}
 
@@ -642,6 +625,52 @@ Kurallar: Icerik {$lang_str} dilinde olacak, ton: {$tone}, yaklasik {$target_wc}
 		}
 
 		return [ 'raw' => $content ];
+	}
+
+	private function parse_full_post_response( array $response, array $current, array $locked_blocks, int $minimum_word_count ): array {
+		$parsed          = $this->parse_json_response( $response['content'] ?? '' );
+		$article_content = $this->extract_article_output( (string) ( $response['content'] ?? '' ) );
+
+		if ( $article_content !== '' ) {
+			$parsed['content'] = $article_content;
+			$parsed['title'] = $parsed['title'] ?? $current['title'];
+			$parsed['meta_description'] = $parsed['meta_description'] ?? $current['meta_description'];
+			$parsed['suggested_tags'] = $parsed['suggested_tags'] ?? [];
+		}
+
+		if ( empty( $parsed['content'] ) ) {
+			$fallback_content = $this->extract_html_fallback( (string) ( $response['content'] ?? '' ) );
+			if ( $fallback_content !== '' ) {
+				$parsed = array_merge(
+					[
+						'title'            => $current['title'],
+						'meta_description' => $current['meta_description'],
+						'suggested_tags'    => [],
+					],
+					$parsed,
+					[ 'content' => $fallback_content ]
+				);
+			} else {
+				$parsed['error'] = 'AI yaniti temiz WordPress HTML olarak okunamadi.';
+			}
+		}
+
+		if ( ! empty( $parsed['content'] ) ) {
+			$clean_content        = $this->clean_model_html( (string) $parsed['content'] );
+			$generated_word_count = aiseo_count_words( $clean_content );
+
+			if ( $this->looks_like_analysis_dump( $clean_content ) || $this->looks_like_raw_json_dump( $clean_content ) ) {
+				unset( $parsed['content'] );
+				$parsed['error'] = 'AI yaniti temiz icerik yerine analiz/JSON metni dondurdu. Icerik uygulanmadi.';
+			} elseif ( $generated_word_count < $minimum_word_count ) {
+				unset( $parsed['content'] );
+				$parsed['error'] = 'AI yaniti cok kisa dondu. Icerik uygulanmadi.';
+			} else {
+				$parsed['content'] = $this->restore_bracket_blocks( $clean_content, $locked_blocks );
+			}
+		}
+
+		return $parsed;
 	}
 
 	private function extract_html_fallback( string $content ): string {

@@ -105,6 +105,41 @@ class AISEO_Internal_Linker {
 		return array_values( array_filter( $rows ) );
 	}
 
+	public function find_posts_without_internal_links( int $limit = 100 ): array {
+		$posts = get_posts( [
+			'post_type'      => 'post',
+			'post_status'    => 'publish',
+			'posts_per_page' => max( 1, min( 300, $limit ) ),
+			'orderby'        => 'date',
+			'order'          => 'DESC',
+		] );
+
+		$items = [];
+		foreach ( $posts as $post ) {
+			if ( ! $post instanceof WP_Post || $this->has_internal_link( $post->post_content ) ) {
+				continue;
+			}
+
+			$category_ids = wp_get_post_categories( $post->ID );
+			$candidates   = $this->count_same_category_candidates( $post->ID, $category_ids );
+			if ( $candidates < 1 ) {
+				continue;
+			}
+
+			$items[] = [
+				'post_id'     => $post->ID,
+				'title'       => $post->post_title,
+				'edit_url'    => get_edit_post_link( $post->ID, 'raw' ),
+				'categories'  => $this->category_names( $category_ids ),
+				'word_count'  => aiseo_count_words( $post->post_content ),
+				'candidates'  => $candidates,
+				'last_update' => get_the_modified_date( 'Y-m-d H:i', $post ),
+			];
+		}
+
+		return $items;
+	}
+
 	public function apply_suggestions( int $post_id, array $suggestion_ids, ?string $source_content = null ): string {
 		if ( empty( $suggestion_ids ) ) {
 			return '';
@@ -186,6 +221,59 @@ class AISEO_Internal_Linker {
 		}
 
 		return $content;
+	}
+
+	private function has_internal_link( string $content ): bool {
+		if ( ! preg_match_all( '/<a\b[^>]*href=["\']([^"\']+)["\'][^>]*>/i', $content, $matches ) ) {
+			return false;
+		}
+
+		$home = rtrim( home_url(), '/' );
+		$site = rtrim( site_url(), '/' );
+		foreach ( $matches[1] as $href ) {
+			$href = trim( html_entity_decode( (string) $href ) );
+			if ( $href === '' || str_starts_with( $href, '#' ) || preg_match( '/^(mailto|tel|javascript):/i', $href ) ) {
+				continue;
+			}
+			if ( str_starts_with( $href, '/' ) || str_starts_with( $href, $home ) || str_starts_with( $href, $site ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	private function count_same_category_candidates( int $post_id, array $category_ids ): int {
+		if ( empty( $category_ids ) ) {
+			return 0;
+		}
+
+		$query = new WP_Query( [
+			'post_type'      => 'post',
+			'post_status'    => 'publish',
+			'posts_per_page' => 1,
+			'fields'         => 'ids',
+			'post__not_in'   => [ $post_id ],
+			'category__in'   => $category_ids,
+		] );
+
+		return (int) $query->found_posts;
+	}
+
+	private function category_names( array $category_ids ): string {
+		if ( empty( $category_ids ) ) {
+			return '';
+		}
+
+		$names = [];
+		foreach ( $category_ids as $category_id ) {
+			$term = get_category( (int) $category_id );
+			if ( $term && ! is_wp_error( $term ) ) {
+				$names[] = $term->name;
+			}
+		}
+
+		return implode( ', ', $names );
 	}
 
 	private function get_anchor_variants( string $anchor, string $title ): array {

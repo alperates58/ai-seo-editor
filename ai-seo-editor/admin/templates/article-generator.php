@@ -72,6 +72,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 						<label><input type="checkbox" id="aiseo-gen-include-faq" checked> <?php esc_html_e( 'FAQ Bölümü Ekle', 'ai-seo-editor' ); ?></label><br>
 						<label><input type="checkbox" id="aiseo-gen-include-meta" checked> <?php esc_html_e( 'Meta Açıklama Üret', 'ai-seo-editor' ); ?></label><br>
 						<label><input type="checkbox" id="aiseo-gen-include-links"> <?php esc_html_e( 'İç Link Önerisi İste', 'ai-seo-editor' ); ?></label>
+						<br><label><input type="checkbox" id="aiseo-gen-auto-links"> <?php esc_html_e( 'Taslak kaydedilince ic linkleri otomatik uret ve ekle', 'ai-seo-editor' ); ?></label>
 					</td>
 				</tr>
 				<?php if ( ! empty( $categories ) ) : ?>

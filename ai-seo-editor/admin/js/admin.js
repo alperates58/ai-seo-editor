@@ -42,11 +42,13 @@
 		bulkAnalyze:      (ids)        => API.request('/bulk-analyze', 'POST', { post_ids: ids }),
 		generateArticle:  (params)     => API.request('/generate', 'POST', params),
 		createDraft:      (data)       => API.request('/generate/create-draft', 'POST', data),
+		getLinklessPosts: ()           => API.request('/links/missing?limit=100'),
 		getLinks:         (pid)        => API.request('/links/' + pid),
 		computeLinks:     (pid)        => API.request('/links/' + pid + '/compute', 'POST'),
-		applyLinks:       (pid, ids, content) => {
+		applyLinks:       (pid, ids, content, autoSave) => {
 			const body = { post_id: pid, suggestion_ids: ids };
 			if (typeof content === 'string') body.content = content;
+			if (autoSave) body.auto_save = true;
 			return API.request('/links/apply', 'POST', body);
 		},
 		optimizeTags:     (pid, data)  => API.request('/tags/optimize/' + pid, 'POST', data || {}),
@@ -373,11 +375,14 @@
 					include_faq:  document.getElementById('aiseo-gen-include-faq')?.checked        ?? true,
 					aux_keywords: document.getElementById('aiseo-gen-aux-keywords')?.value?.trim() || '',
 					category:     parseInt(document.getElementById('aiseo-gen-category')?.value)   || 0,
+					auto_internal_links: document.getElementById('aiseo-gen-auto-links')?.checked  || false,
 				};
 
 				try {
 					const res = await API.generateArticle(params);
 					lastGenerationResult = res.data || {};
+					lastGenerationResult.category = params.category;
+					lastGenerationResult.auto_internal_links = params.auto_internal_links;
 					renderArticlePreview(lastGenerationResult);
 					if (previewCard) previewCard.style.display = '';
 				} catch (e) {
@@ -396,6 +401,7 @@
 				try {
 					const res = await API.createDraft(lastGenerationResult);
 					const editUrl = res.data?.edit_url;
+					const linksAdded = parseInt(res.data?.links_added || 0);
 					if (editUrl) {
 						if (confirm((i18n.draftCreated || 'Taslak oluşturuldu! Düzenlemek ister misiniz?'))) {
 							window.location.href = editUrl;
@@ -452,6 +458,13 @@
 		const selectAll  = document.getElementById('aiseo-select-all-links');
 		const tbody      = document.getElementById('aiseo-links-tbody');
 		const postSelect = document.getElementById('aiseo-link-post-select');
+		const missingBody = document.getElementById('aiseo-linkless-tbody');
+		const refreshBtn  = document.getElementById('aiseo-refresh-linkless');
+
+		if (missingBody) loadLinklessPosts(missingBody);
+		if (refreshBtn) {
+			refreshBtn.addEventListener('click', () => loadLinklessPosts(missingBody, refreshBtn));
+		}
 
 		if (selectAll) {
 			selectAll.addEventListener('change', () => {
@@ -521,6 +534,81 @@
 				}
 			});
 		}
+
+		document.addEventListener('click', async (event) => {
+			const btn = event.target instanceof Element ? event.target.closest('.aiseo-linkless-apply') : null;
+			if (!btn) return;
+			event.preventDefault();
+
+			const postId = parseInt(btn.dataset.postId);
+			if (!Number.isFinite(postId) || postId <= 0) return;
+
+			UI.loading(btn, true);
+			try {
+				const computeRes = await API.computeLinks(postId);
+				const suggestions = computeRes.data?.suggestions || [];
+				const selectedIds = suggestions
+					.slice(0, 3)
+					.map((item) => parseInt(item.id))
+					.filter((id) => Number.isFinite(id) && id > 0);
+
+				if (!selectedIds.length) {
+					UI.notice('aiseo-links-notice', 'Bu yazi icin ayni kategoride uygulanabilir ic link bulunamadi.', 'warning');
+					return;
+				}
+
+				const applyRes = await API.applyLinks(postId, selectedIds, null, true);
+				const data = applyRes.data || {};
+				if (!data.auto_saved) {
+					UI.notice('aiseo-links-notice', 'Ic link hazirlandi ama yazida degisiklik olusmadi.', 'warning');
+					return;
+				}
+
+				btn.closest('tr')?.remove();
+				if (missingBody && !missingBody.querySelector('tr')) {
+					missingBody.innerHTML = '<tr><td colspan="6" class="aiseo-empty">Ic linksiz yazi kalmadi.</td></tr>';
+				}
+				UI.notice('aiseo-links-notice', 'Ic linkler yazıya eklendi ve yazı otomatik kaydedildi.', 'success');
+			} catch (e) {
+				UI.notice('aiseo-links-notice', e.message || i18n.error, 'error');
+			} finally {
+				UI.loading(btn, false);
+			}
+		});
+	}
+
+	async function loadLinklessPosts(tbody, btn) {
+		if (!tbody) return;
+		if (btn) UI.loading(btn, true);
+		tbody.innerHTML = '<tr><td colspan="6" class="aiseo-empty">Yazilar taraniyor...</td></tr>';
+		try {
+			const res = await API.getLinklessPosts();
+			renderLinklessPosts(tbody, res.data?.posts || []);
+		} catch (e) {
+			tbody.innerHTML = '<tr><td colspan="6" class="aiseo-empty">' + escapeHtml(e.message || i18n.error) + '</td></tr>';
+		} finally {
+			if (btn) UI.loading(btn, false);
+		}
+	}
+
+	function renderLinklessPosts(tbody, posts) {
+		tbody.innerHTML = '';
+		if (!posts.length) {
+			tbody.innerHTML = '<tr><td colspan="6" class="aiseo-empty">Ic linksiz yazi bulunmadi.</td></tr>';
+			return;
+		}
+		posts.forEach((post) => {
+			const row = document.createElement('tr');
+			row.dataset.postId = post.post_id || '';
+			row.innerHTML =
+				'<td><a href="' + escapeHtml(post.edit_url || '') + '">' + escapeHtml(post.title || '') + '</a></td>' +
+				'<td>' + escapeHtml(post.categories || '-') + '</td>' +
+				'<td>' + escapeHtml(post.word_count || 0) + '</td>' +
+				'<td>' + escapeHtml(post.candidates || 0) + '</td>' +
+				'<td>' + escapeHtml(post.last_update || '-') + '</td>' +
+				'<td><button type="button" class="button button-primary button-small aiseo-linkless-apply" data-post-id="' + escapeHtml(post.post_id || '') + '">Ic Link Ekle</button></td>';
+			tbody.appendChild(row);
+		});
 	}
 
 	function renderLinkSuggestions(tbody, suggestions) {

@@ -101,6 +101,12 @@ class AISEO_Rest_Controller {
 			'permission_callback' => [ $this, 'check_permissions' ],
 		] );
 
+		register_rest_route( self::NAMESPACE, '/links/missing', [
+			'methods'             => WP_REST_Server::READABLE,
+			'callback'            => [ $this, 'get_posts_without_internal_links' ],
+			'permission_callback' => [ $this, 'check_permissions' ],
+		] );
+
 		register_rest_route( self::NAMESPACE, '/links/(?P<post_id>\d+)/compute', [
 			'methods'             => WP_REST_Server::CREATABLE,
 			'callback'            => [ $this, 'compute_links' ],
@@ -538,7 +544,7 @@ class AISEO_Rest_Controller {
 
 		foreach ( $post_ids as $post_id ) {
 			if ( $this->post_exists( $post_id ) ) {
-				$result    = $analyzer->analyze( $post_id );
+				$result    = $analyzer->analyze( $post_id, true );
 				$results[] = [
 					'post_id'           => $post_id,
 					'seo_score'         => $result['seo_score'] ?? 0,
@@ -590,6 +596,7 @@ class AISEO_Rest_Controller {
 		$meta     = sanitize_textarea_field( $request->get_param( 'meta_description' ) ?? '' );
 		$category = absint( $request->get_param( 'category' ) ?? 0 );
 		$tags     = array_map( 'sanitize_text_field', (array) ( $request->get_param( 'suggested_tags' ) ?? [] ) );
+		$auto_links = (bool) ( $request->get_param( 'auto_internal_links' ) ?? false );
 
 		if ( empty( $content ) || empty( $title ) ) {
 			return new WP_Error( 'aiseo_missing_param', __( 'Başlık ve içerik zorunludur.', 'ai-seo-editor' ), [ 'status' => 422 ] );
@@ -613,10 +620,16 @@ class AISEO_Rest_Controller {
 			return new WP_Error( 'aiseo_draft_error', __( 'Taslak oluşturulamadı.', 'ai-seo-editor' ), [ 'status' => 500 ] );
 		}
 
+		$links_added = 0;
+		if ( $auto_links ) {
+			$links_added = $this->auto_apply_internal_links( $post_id, 3 );
+		}
+
 		return $this->ok(
 			[
-				'post_id'  => $post_id,
-				'edit_url' => admin_url( 'post.php?post=' . $post_id . '&action=edit' ),
+				'post_id'     => $post_id,
+				'edit_url'    => admin_url( 'post.php?post=' . $post_id . '&action=edit' ),
+				'links_added' => $links_added,
 			],
 			__( 'Taslak oluşturuldu!', 'ai-seo-editor' )
 		);
@@ -633,6 +646,14 @@ class AISEO_Rest_Controller {
 		$cached  = $linker->get_cached( $post_id );
 
 		return $this->ok( [ 'suggestions' => $cached ] );
+	}
+
+	public function get_posts_without_internal_links( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+		$client = new AISEO_OpenAI_Client( $this->settings );
+		$linker = new AISEO_Internal_Linker( $client, $this->logger );
+		$limit  = max( 1, min( 300, absint( $request->get_param( 'limit' ) ?? 100 ) ) );
+
+		return $this->ok( [ 'posts' => $linker->find_posts_without_internal_links( $limit ) ] );
 	}
 
 	public function compute_links( WP_REST_Request $request ): WP_REST_Response|WP_Error {
@@ -652,6 +673,7 @@ class AISEO_Rest_Controller {
 		$post_id        = absint( $request->get_param( 'post_id' ) );
 		$suggestion_ids = array_map( 'absint', (array) ( $request->get_param( 'suggestion_ids' ) ?? [] ) );
 		$content        = $request->has_param( 'content' ) ? wp_kses_post( $request->get_param( 'content' ) ) : null;
+		$auto_save      = (bool) ( $request->get_param( 'auto_save' ) ?? false );
 
 		if ( ! $this->post_exists( $post_id ) ) {
 			return $this->not_found();
@@ -668,12 +690,33 @@ class AISEO_Rest_Controller {
 			return new WP_Error( 'aiseo_apply_error', __( 'İç linkler hazırlanamadı.', 'ai-seo-editor' ), [ 'status' => 500 ] );
 		}
 
+		$old_content = get_post_field( 'post_content', $post_id );
+		$changed     = $new_content !== $old_content;
+		if ( $auto_save && $changed ) {
+			$post = get_post( $post_id );
+			if ( $post instanceof WP_Post && post_type_supports( $post->post_type, 'revisions' ) ) {
+				wp_save_post_revision( $post_id );
+			}
+
+			$updated = wp_update_post( [
+				'ID'           => $post_id,
+				'post_content' => $new_content,
+			], true );
+
+			if ( is_wp_error( $updated ) ) {
+				return new WP_Error( 'aiseo_apply_error', $updated->get_error_message(), [ 'status' => 500 ] );
+			}
+
+			$this->logger->invalidate_cache( $post_id );
+		}
+
 		return $this->ok(
 			[
-				'post_id'  => $post_id,
-				'content'  => $new_content,
-				'edit_url' => admin_url( 'post.php?post=' . $post_id . '&action=edit' ),
-				'changed'  => $new_content !== get_post_field( 'post_content', $post_id ),
+				'post_id'    => $post_id,
+				'content'    => $new_content,
+				'edit_url'   => admin_url( 'post.php?post=' . $post_id . '&action=edit' ),
+				'changed'    => $changed,
+				'auto_saved' => $auto_save && $changed,
 			],
 			__( 'İç linkler editörde uygulanmak üzere hazırlandı.', 'ai-seo-editor' )
 		);
@@ -732,6 +775,41 @@ class AISEO_Rest_Controller {
 					$error ?: __( 'Bilinmeyen hata.', 'ai-seo-editor' )
 				)
 		);
+	}
+
+	private function auto_apply_internal_links( int $post_id, int $limit = 3 ): int {
+		$client      = new AISEO_OpenAI_Client( $this->settings );
+		$linker      = new AISEO_Internal_Linker( $client, $this->logger );
+		$suggestions = $linker->find_suggestions( $post_id );
+		$ids         = [];
+
+		foreach ( array_slice( $suggestions, 0, $limit ) as $suggestion ) {
+			$id = absint( $suggestion['id'] ?? 0 );
+			if ( $id > 0 ) {
+				$ids[] = $id;
+			}
+		}
+
+		if ( empty( $ids ) ) {
+			return 0;
+		}
+
+		$content = $linker->apply_suggestions( $post_id, $ids );
+		if ( empty( $content ) || $content === get_post_field( 'post_content', $post_id ) ) {
+			return 0;
+		}
+
+		$updated = wp_update_post( [
+			'ID'           => $post_id,
+			'post_content' => $content,
+		], true );
+
+		if ( is_wp_error( $updated ) ) {
+			return 0;
+		}
+
+		$this->logger->invalidate_cache( $post_id );
+		return count( $ids );
 	}
 
 	private function post_exists( int $post_id ): bool {

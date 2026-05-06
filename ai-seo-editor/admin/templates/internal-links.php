@@ -11,6 +11,31 @@ if ( ! defined( 'ABSPATH' ) ) {
 	</h1>
 
 	<div class="aiseo-card">
+		<div class="aiseo-card__header" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+			<div>
+				<h2 class="aiseo-card__title"><?php esc_html_e( 'Ic link olmayan yazilar', 'ai-seo-editor' ); ?></h2>
+				<p class="description"><?php esc_html_e( 'Ayni kategorideki uygun yazilari bulup tek tikla ic link ekler ve yaziyi otomatik kaydeder.', 'ai-seo-editor' ); ?></p>
+			</div>
+			<button type="button" id="aiseo-refresh-linkless" class="button"><?php esc_html_e( 'Listeyi Yenile', 'ai-seo-editor' ); ?></button>
+		</div>
+		<table class="aiseo-table wp-list-table widefat fixed striped">
+			<thead>
+				<tr>
+					<th><?php esc_html_e( 'Yazi', 'ai-seo-editor' ); ?></th>
+					<th><?php esc_html_e( 'Kategori', 'ai-seo-editor' ); ?></th>
+					<th><?php esc_html_e( 'Kelime', 'ai-seo-editor' ); ?></th>
+					<th><?php esc_html_e( 'Ayni Kategori Adayi', 'ai-seo-editor' ); ?></th>
+					<th><?php esc_html_e( 'Son Guncelleme', 'ai-seo-editor' ); ?></th>
+					<th><?php esc_html_e( 'Islem', 'ai-seo-editor' ); ?></th>
+				</tr>
+			</thead>
+			<tbody id="aiseo-linkless-tbody">
+				<tr><td colspan="6" class="aiseo-empty"><?php esc_html_e( 'Yazilar taraniyor...', 'ai-seo-editor' ); ?></td></tr>
+			</tbody>
+		</table>
+	</div>
+
+	<div class="aiseo-card">
 		<p><?php esc_html_e( 'Bir yazı seçin, AI ve içerik benzerliğine göre iç link önerileri oluşturun.', 'ai-seo-editor' ); ?></p>
 		<div class="aiseo-link-controls">
 			<select id="aiseo-link-post-select" style="min-width:300px">
