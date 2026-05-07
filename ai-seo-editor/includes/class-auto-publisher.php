@@ -258,15 +258,30 @@ class AISEO_Auto_Publisher {
 		$post       = get_post( $post_id );
 		$title      = $post instanceof WP_Post ? $post->post_title : '';
 		$categories = wp_get_post_categories( $post_id );
-		$category   = ! empty( $categories ) ? (int) $categories[0] : 0;
 
-		$keyword = (string) get_post_meta( $post_id, '_aiseo_focus_keyword', true );
+		// Kategori önceliği: en alttaki alt kategori (child-first)
+		$category = 0;
+		if ( ! empty( $categories ) ) {
+			usort( $categories, static function ( $a, $b ) {
+				$depth_a = count( get_ancestors( $a, 'category' ) );
+				$depth_b = count( get_ancestors( $b, 'category' ) );
+				return $depth_b <=> $depth_a;
+			} );
+			$category = (int) $categories[0];
+		}
+
+		// Yoast keyword → yoksa başlıktan türet
+		$yoast   = new AISEO_Yoast_Integration();
+		$keyword = $yoast->get_focus_keyword( $post_id );
+		if ( empty( $keyword ) ) {
+			$keyword = (string) get_post_meta( $post_id, '_aiseo_focus_keyword', true );
+		}
 		if ( empty( $keyword ) ) {
 			$keyword = $title;
 		}
 
 		$params = [
-			'keyword'      => $keyword ?: $title,
+			'keyword'      => $keyword,
 			'title'        => $title,
 			'tone'         => $settings['tone'],
 			'language'     => (string) $this->settings->get( 'default_language' ),
@@ -281,8 +296,9 @@ class AISEO_Auto_Publisher {
 	}
 
 	private function optimize_post( int $post_id, array $settings, string $content, string $title ): array {
-		$yoast   = new AISEO_Yoast_Integration();
-		$keyword = $yoast->get_focus_keyword( $post_id );
+		$yoast              = new AISEO_Yoast_Integration();
+		$keyword            = $yoast->get_focus_keyword( $post_id );
+		$keyword_from_title = empty( $keyword );
 		if ( empty( $keyword ) ) {
 			$keyword = $title;
 		}
@@ -291,9 +307,10 @@ class AISEO_Auto_Publisher {
 		}
 
 		try {
-			$client = new AISEO_OpenAI_Client( $this->settings );
-			$meta   = $yoast->get_meta_description( $post_id );
-			$result = $client->optimize_full_post( $post_id, $keyword, $settings['tone'], $content, $title, $meta, [] );
+			$client       = new AISEO_OpenAI_Client( $this->settings );
+			$meta         = $yoast->get_meta_description( $post_id );
+			$current_tags = wp_get_post_tags( $post_id, [ 'fields' => 'names' ] );
+			$result       = $client->optimize_full_post( $post_id, $keyword, $settings['tone'], $content, $title, $meta, $current_tags );
 
 			if ( empty( $result['content'] ) ) {
 				return [ 'success' => false, 'message' => 'Optimizasyon içerik döndürmedi.' ];
@@ -302,7 +319,15 @@ class AISEO_Auto_Publisher {
 			$new_title   = sanitize_text_field( $result['title'] ?? $title );
 			$new_content = wp_kses_post( $result['content'] );
 			$new_meta    = sanitize_textarea_field( $result['meta_description'] ?? $meta );
-			$new_tags    = array_map( 'sanitize_text_field', is_array( $result['suggested_tags'] ?? null ) ? $result['suggested_tags'] : [] );
+			$tokens      = (int) ( $result['tokens_used'] ?? 0 );
+
+			// Keyword Yoast'a kaydet (title'dan türetilmişse de mutlaka kaydet)
+			if ( $keyword_from_title || ! $yoast->get_focus_keyword( $post_id ) ) {
+				update_post_meta( $post_id, '_aiseo_focus_keyword', $keyword );
+				if ( $yoast->is_yoast_active() ) {
+					$yoast->set_focus_keyword( $post_id, $keyword );
+				}
+			}
 
 			if ( $new_meta !== '' ) {
 				update_post_meta( $post_id, '_aiseo_meta_description', $new_meta );
@@ -310,6 +335,15 @@ class AISEO_Auto_Publisher {
 					$yoast->set_meta_description( $post_id, $new_meta );
 				}
 			}
+
+			// Ayrı optimize_tags çağrısı — "Etiketleri Düzelt" ile aynı davranış
+			$tag_result = $client->optimize_tags( $post_id, $keyword, $new_content, (array) $current_tags );
+			$new_tags   = array_map(
+				'sanitize_text_field',
+				is_array( $tag_result['tags'] ?? null ) ? $tag_result['tags'] : ( is_array( $result['suggested_tags'] ?? null ) ? $result['suggested_tags'] : [] )
+			);
+			$tokens += (int) ( $tag_result['tokens_used'] ?? 0 );
+
 			if ( ! empty( $new_tags ) ) {
 				wp_set_post_tags( $post_id, $new_tags );
 			}
@@ -317,7 +351,7 @@ class AISEO_Auto_Publisher {
 			$this->logger->log_ai_operation(
 				$post_id, 'auto_publish_optimize',
 				(string) $this->settings->get( 'openai_model' ),
-				0, (int) ( $result['tokens_used'] ?? 0 ), 'success'
+				0, $tokens, 'success'
 			);
 
 			return [ 'success' => true, 'title' => $new_title, 'content' => $new_content ];
