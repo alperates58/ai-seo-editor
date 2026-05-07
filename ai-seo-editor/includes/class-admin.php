@@ -380,10 +380,11 @@ class AISEO_Admin {
 		$ap_settings    = $auto_publisher->get_settings();
 		$categories     = get_categories( [ 'hide_empty' => false ] );
 		$queue          = $auto_publisher->get_queue( 20 );
+		$total_queue_count = $auto_publisher->count_queue();
 		$history        = $auto_publisher->get_history( 20 );
 		$next_run       = $auto_publisher->get_next_scheduled();
 
-		$this->render_template( 'auto-publisher', compact( 'auto_publisher', 'ap_settings', 'categories', 'queue', 'history', 'next_run' ) );
+		$this->render_template( 'auto-publisher', compact( 'auto_publisher', 'ap_settings', 'categories', 'queue', 'total_queue_count', 'history', 'next_run' ) );
 	}
 
 	public function page_settings(): void {

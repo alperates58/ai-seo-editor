@@ -429,6 +429,35 @@ class AISEO_Auto_Publisher {
 		return $queue;
 	}
 
+	public function count_queue(): int {
+		$settings = $this->get_settings();
+		$args     = [
+			'post_type'              => 'post',
+			'post_status'            => 'draft',
+			'posts_per_page'         => 1,
+			'orderby'                => 'date',
+			'order'                  => 'ASC',
+			'fields'                 => 'ids',
+			'no_found_rows'          => false,
+			'update_post_meta_cache' => false,
+			'update_post_term_cache' => false,
+			'meta_query'             => [
+				[
+					'key'     => '_aiseo_auto_publish_skip',
+					'compare' => 'NOT EXISTS',
+				],
+			],
+		];
+
+		if ( ! empty( $settings['category_ids'] ) ) {
+			$args['category__in'] = $settings['category_ids'];
+		}
+
+		$query = new WP_Query( $args );
+
+		return max( 0, (int) $query->found_posts );
+	}
+
 	public function get_history( int $limit = 10 ): array {
 		$posts = get_posts( [
 			'post_type'      => 'post',

@@ -1210,12 +1210,13 @@
 
 .aiseo-ap-tabs {
 	display: flex;
-	flex-wrap: wrap;
+	flex-direction: column;
 	gap: 10px;
 	margin-bottom: 16px;
 }
 
 .aiseo-ap-tab {
+	width: 100%;
 	padding: 10px 14px;
 	border-radius: 14px;
 	border: 1px solid transparent;
@@ -1223,6 +1224,7 @@
 	color: var(--aiseo-ap-muted);
 	font-size: 13px;
 	font-weight: 600;
+	text-align: left;
 	cursor: pointer;
 	transition: all .2s ease;
 }

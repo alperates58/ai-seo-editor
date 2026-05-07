@@ -905,7 +905,12 @@ class AISEO_Rest_Controller {
 	public function get_auto_publisher_queue( WP_REST_Request $request ): WP_REST_Response {
 		$ap    = new AISEO_Auto_Publisher( $this->settings, $this->logger );
 		$limit = max( 1, min( 50, absint( $request->get_param( 'limit' ) ?? 20 ) ) );
-		return $this->ok( [ 'queue' => $ap->get_queue( $limit ) ] );
+		return $this->ok(
+			[
+				'queue' => $ap->get_queue( $limit ),
+				'total' => $ap->count_queue(),
+			]
+		);
 	}
 
 	public function skip_auto_publisher_post( WP_REST_Request $request ): WP_REST_Response|WP_Error {

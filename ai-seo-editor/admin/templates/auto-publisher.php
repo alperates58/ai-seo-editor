@@ -6,6 +6,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /** @var array $ap_settings */
 /** @var array $categories */
 /** @var array $queue */
+/** @var int $total_queue_count */
 /** @var array $history */
 /** @var string|null $next_run */
 
@@ -167,9 +168,9 @@ $average_readability = ! empty( $read_pool ) ? (int) round( array_sum( $read_poo
 $kpi_cards = [
 	[
 		'label'    => 'Bekleyen Taslak',
-		'value'    => count( $queue ),
+		'value'    => $total_queue_count,
 		'accent'   => 'violet',
-		'mini'     => empty( $queue ) ? 'Kuyruk temiz' : 'Sirada islenmeyi bekliyor',
+		'mini'     => empty( $total_queue_count ) ? 'Kuyruk temiz' : 'Sirada islenmeyi bekliyor',
 		'icon'     => 'dashicons-edit-page',
 	],
 	[
@@ -274,7 +275,7 @@ if ( empty( $activity_items ) ) {
 				</div>
 				<div class="aiseo-ap-kpi__body">
 					<div class="aiseo-ap-kpi__label"><?php echo esc_html( $card['label'] ); ?></div>
-					<div class="aiseo-ap-kpi__value" data-counter-target="<?php echo esc_attr( is_numeric( $card['value'] ) ? (string) $card['value'] : preg_replace( '/[^0-9]/', '', (string) $card['value'] ) ); ?>">
+					<div class="aiseo-ap-kpi__value<?php echo 'Bekleyen Taslak' === $card['label'] ? ' aiseo-ap-kpi__value--queue-count' : ''; ?>" data-counter-target="<?php echo esc_attr( is_numeric( $card['value'] ) ? (string) $card['value'] : preg_replace( '/[^0-9]/', '', (string) $card['value'] ) ); ?>">
 						<?php echo esc_html( (string) $card['value'] ); ?>
 					</div>
 					<div class="aiseo-ap-kpi__mini"><?php echo esc_html( $card['mini'] ); ?></div>
