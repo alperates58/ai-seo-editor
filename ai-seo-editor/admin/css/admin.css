@@ -1156,14 +1156,32 @@
 
 .aiseo-ap-dashboard {
 	display: grid;
-	grid-template-columns: minmax(320px, 360px) minmax(0, 1fr);
+	grid-template-columns: minmax(0, 1fr);
 	gap: 20px;
 	align-items: start;
 }
 
 .aiseo-ap-config {
-	position: sticky;
-	top: 32px;
+	position: static;
+}
+
+.aiseo-ap-config .aiseo-ap-field-grid {
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.aiseo-ap-config .aiseo-ap-tab-panel[data-ap-panel="seo"] .aiseo-ap-field-grid,
+.aiseo-ap-config .aiseo-ap-tab-panel[data-ap-panel="content"] .aiseo-ap-field-grid {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.aiseo-ap-config .aiseo-ap-option-stack,
+.aiseo-ap-config .aiseo-ap-highlight,
+.aiseo-ap-config .aiseo-ap-category-picker {
+	grid-column: 1 / -1;
+}
+
+.aiseo-ap-config .aiseo-ap-actions {
+	justify-content: flex-end;
 }
 
 .aiseo-ap-panel {
@@ -1947,6 +1965,12 @@
 		flex-direction: column;
 	}
 
+	.aiseo-ap-config .aiseo-ap-field-grid,
+	.aiseo-ap-config .aiseo-ap-tab-panel[data-ap-panel="seo"] .aiseo-ap-field-grid,
+	.aiseo-ap-config .aiseo-ap-tab-panel[data-ap-panel="content"] .aiseo-ap-field-grid {
+		grid-template-columns: 1fr 1fr;
+	}
+
 	.aiseo-ap-kpis,
 	.aiseo-ap-dashboard,
 	.aiseo-ap-analytics-grid,
@@ -1986,6 +2010,12 @@
 
 	.aiseo-ap-config {
 		position: static;
+	}
+
+	.aiseo-ap-config .aiseo-ap-field-grid,
+	.aiseo-ap-config .aiseo-ap-tab-panel[data-ap-panel="seo"] .aiseo-ap-field-grid,
+	.aiseo-ap-config .aiseo-ap-tab-panel[data-ap-panel="content"] .aiseo-ap-field-grid {
+		grid-template-columns: 1fr;
 	}
 
 	.aiseo-ap-category-toolbar,
