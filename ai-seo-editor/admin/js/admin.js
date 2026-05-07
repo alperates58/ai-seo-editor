@@ -10,6 +10,113 @@
 	const nonce   = Config.nonce || '';
 	const githubNonce = Config.githubNonce || nonce;
 
+	function initAutoPublisherEnhanced() {
+		const saveBtn = document.getElementById('aiseo-ap-save');
+		const triggerBtn = document.getElementById('aiseo-ap-trigger');
+		const refreshBtn = document.getElementById('aiseo-ap-refresh-queue');
+		const enabledEl = document.getElementById('aiseo-ap-enabled');
+		const statusLbl = document.getElementById('aiseo-ap-status-label');
+		const categorySelect = document.getElementById('aiseo-ap-categories');
+		const categorySearch = document.getElementById('aiseo-ap-category-search');
+		const categoryOptions = document.getElementById('aiseo-ap-category-options');
+		const categoryChips = document.getElementById('aiseo-ap-category-chips');
+		const categoryCount = document.getElementById('aiseo-ap-category-count');
+		const clearCategoriesBtn = document.getElementById('aiseo-ap-clear-categories');
+		const nextRunText = document.getElementById('aiseo-ap-next-run-text');
+		const queueWrap = document.getElementById('aiseo-ap-queue-wrap');
+		const drawer = document.getElementById('aiseo-ap-preview-drawer');
+		const drawerTitle = document.getElementById('aiseo-ap-drawer-title');
+		const drawerSeo = document.getElementById('aiseo-ap-drawer-seo');
+		const drawerRead = document.getElementById('aiseo-ap-drawer-read');
+		const drawerTraffic = document.getElementById('aiseo-ap-drawer-traffic');
+		const drawerConfidence = document.getElementById('aiseo-ap-drawer-confidence');
+		const drawerExcerpt = document.getElementById('aiseo-ap-drawer-excerpt');
+		const drawerMeta = document.getElementById('aiseo-ap-drawer-meta');
+		const drawerFaq = document.getElementById('aiseo-ap-drawer-faq');
+		const drawerLinks = document.getElementById('aiseo-ap-drawer-links');
+		const drawerEdit = document.getElementById('aiseo-ap-drawer-edit');
+		const counterEls = document.querySelectorAll('[data-counter-target]');
+
+		initTabs();
+		initCategoryPicker();
+		initProxyActions();
+		initPreviewDrawer();
+		animateCounters();
+		bindQueueActions();
+
+		if (enabledEl && statusLbl) {
+			enabledEl.addEventListener('change', updateStatusLabel);
+			updateStatusLabel();
+		}
+
+		if (saveBtn) {
+			saveBtn.addEventListener('click', async () => {
+				UI.loading(saveBtn, true);
+				try {
+					const res = await API.saveAutoPublisherSettings(getFormData());
+					const data = res.data || {};
+					updateStatusLabel();
+					updateNextRunText(data.next_run);
+					UI.notice('aiseo-ap-notice', res.message || 'Ayarlar kaydedildi.', 'success');
+				} catch (e) {
+					UI.notice('aiseo-ap-notice', e.message || i18n.error, 'error');
+				} finally {
+					UI.loading(saveBtn, false);
+				}
+			});
+		}
+
+		if (triggerBtn) {
+			triggerBtn.addEventListener('click', async () => {
+				if (!confirm('Kuyruktan bir taslak simdi islenip yayinlansin mi? Bu islem birkac dakika surebilir.')) return;
+				await runQueueTrigger(triggerBtn);
+			});
+		}
+
+		if (refreshBtn) {
+			refreshBtn.addEventListener('click', async () => {
+				UI.loading(refreshBtn, true);
+				try {
+					const res = await API.getAutoPublisherQueue();
+					const queue = res.data?.queue || [];
+					renderQueue(queue);
+					UI.notice('aiseo-ap-notice', 'Kuyruk guncellendi.', 'success');
+				} catch (e) {
+					UI.notice('aiseo-ap-notice', e.message || i18n.error, 'error');
+				} finally {
+					UI.loading(refreshBtn, false);
+				}
+			});
+		}
+
+		function getFormData() { const categoryEls = document.querySelectorAll('#aiseo-ap-categories option:checked'); return { enabled: document.getElementById('aiseo-ap-enabled')?.checked || false, interval_hours: parseInt(document.getElementById('aiseo-ap-interval')?.value, 10) || 24, min_seo_score: parseInt(document.getElementById('aiseo-ap-min-seo')?.value, 10) || 70, min_readability_score: parseInt(document.getElementById('aiseo-ap-min-read')?.value, 10) || 60, category_ids: Array.from(categoryEls).map((o) => parseInt(o.value, 10)).filter(Boolean), internal_links_count: parseInt(document.getElementById('aiseo-ap-links')?.value, 10) || 3, target_words: parseInt(document.getElementById('aiseo-ap-words')?.value, 10) || 1000, tone: document.getElementById('aiseo-ap-tone')?.value || 'professional', include_faq: document.getElementById('aiseo-ap-faq')?.checked || false, auto_generate: document.getElementById('aiseo-ap-auto-generate')?.checked || false, optimize_before_publish: document.getElementById('aiseo-ap-optimize')?.checked || false }; }
+		function updateStatusLabel() { if (!enabledEl || !statusLbl) return; statusLbl.textContent = enabledEl.checked ? 'Aktif' : 'Pasif'; statusLbl.className = 'aiseo-ap-status-label ' + (enabledEl.checked ? 'active' : 'inactive'); }
+		function updateNextRunText(nextRun) { if (nextRunText) nextRunText.textContent = nextRun ? 'Sonraki calisma: ' + nextRun : 'Henuz zamanlanmamis.'; }
+		function initTabs() { document.querySelectorAll('.aiseo-ap-tab').forEach((tab) => { tab.addEventListener('click', () => { const key = tab.dataset.apTab; document.querySelectorAll('.aiseo-ap-tab').forEach((item) => { const active = item === tab; item.classList.toggle('is-active', active); item.setAttribute('aria-selected', active ? 'true' : 'false'); }); document.querySelectorAll('.aiseo-ap-tab-panel').forEach((panel) => { const active = panel.dataset.apPanel === key; panel.classList.toggle('is-active', active); panel.hidden = !active; }); }); }); }
+		function initCategoryPicker() { if (!categorySelect || !categoryOptions || !categoryChips) return; categoryOptions.querySelectorAll('.aiseo-ap-category-option').forEach((btn) => { btn.addEventListener('click', () => toggleCategory(parseInt(btn.dataset.termId, 10))); }); if (categorySearch) { categorySearch.addEventListener('input', () => { const query = String(categorySearch.value || '').trim().toLowerCase(); categoryOptions.querySelectorAll('.aiseo-ap-category-option').forEach((btn) => { const name = String(btn.dataset.termName || '').toLowerCase(); btn.hidden = query ? !name.includes(query) : false; }); }); } if (clearCategoriesBtn) { clearCategoriesBtn.addEventListener('click', () => { Array.from(categorySelect.options).forEach((option) => { option.selected = false; }); renderCategorySelection(); }); } renderCategorySelection(); }
+		function toggleCategory(termId) { const option = Array.from(categorySelect.options).find((item) => parseInt(item.value, 10) === termId); if (!option) return; option.selected = !option.selected; renderCategorySelection(); }
+		function renderCategorySelection() { if (!categorySelect || !categoryOptions || !categoryChips) return; const selected = Array.from(categorySelect.options).filter((option) => option.selected); if (categoryCount) categoryCount.textContent = String(selected.length); categoryOptions.querySelectorAll('.aiseo-ap-category-option').forEach((btn) => { const termId = parseInt(btn.dataset.termId, 10); const match = selected.some((option) => parseInt(option.value, 10) === termId); btn.classList.toggle('is-selected', match); }); if (!selected.length) { categoryChips.innerHTML = '<span class="aiseo-ap-row-meta">Tum kategoriler dahil.</span>'; return; } categoryChips.innerHTML = selected.map((option) => { const termId = parseInt(option.value, 10); const label = option.textContent.replace(/\s*\(\d+\)\s*$/, ''); return '<span class="aiseo-ap-chip">' + escapeHtml(label) + '<button type="button" data-chip-remove="' + termId + '" aria-label="Kategoriyi kaldir">x</button></span>'; }).join(''); categoryChips.querySelectorAll('[data-chip-remove]').forEach((btn) => { btn.addEventListener('click', () => toggleCategory(parseInt(btn.dataset.chipRemove, 10))); }); }
+		function initProxyActions() { document.querySelectorAll('.aiseo-ap-proxy-action').forEach((btn) => { btn.addEventListener('click', () => { const target = document.getElementById(btn.dataset.target || ''); if (target) target.click(); }); }); }
+		function initPreviewDrawer() { if (!drawer) return; drawer.querySelectorAll('[data-ap-drawer-close]').forEach((el) => { el.addEventListener('click', closeDrawer); }); document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !drawer.hidden) closeDrawer(); }); }
+		function openDrawer(payload) { if (!drawer || !payload) return; if (drawerTitle) drawerTitle.textContent = payload.title || 'Taslak onizlemesi'; if (drawerSeo) drawerSeo.textContent = payload.seoScore > 0 ? String(payload.seoScore) : '--'; if (drawerRead) drawerRead.textContent = payload.readScore > 0 ? String(payload.readScore) : '--'; if (drawerTraffic) drawerTraffic.textContent = payload.traffic ? '~' + payload.traffic : '--'; if (drawerConfidence) drawerConfidence.textContent = payload.confidence || '--'; if (drawerExcerpt) drawerExcerpt.textContent = payload.excerpt || 'Icerik onizlemesi bulunamadi.'; if (drawerMeta) drawerMeta.textContent = payload.meta || 'Meta description bulunamadi.'; if (drawerFaq) drawerFaq.textContent = payload.faqCount ? payload.faqCount + ' potansiyel soru basligi tespit edildi.' : 'FAQ bolumu henuz gorunmuyor.'; if (drawerLinks) { const links = Array.isArray(payload.internalLinks) ? payload.internalLinks : []; drawerLinks.innerHTML = links.length ? links.map((item) => '<li>' + escapeHtml(item) + '</li>').join('') : '<li>Ic link onizlemesi henuz yok.</li>'; } if (drawerEdit) drawerEdit.href = payload.editUrl || '#'; drawer.hidden = false; drawer.setAttribute('aria-hidden', 'false'); document.body.classList.add('aiseo-ap-drawer-open'); }
+		function closeDrawer() { if (!drawer) return; drawer.hidden = true; drawer.setAttribute('aria-hidden', 'true'); document.body.classList.remove('aiseo-ap-drawer-open'); }
+		function animateCounters() { counterEls.forEach((el) => { const rawTarget = String(el.dataset.counterTarget || ''); if (!rawTarget || !/^\d+$/.test(rawTarget)) return; const target = parseInt(rawTarget, 10); if (!Number.isFinite(target)) return; const original = String(el.textContent || ''); const hasScale = /\/100$/.test(original); const hasApprox = /^~/.test(original); const start = performance.now(); const duration = 700; function frame(now) { const progress = Math.min(1, (now - start) / duration); const value = Math.round(target * progress); el.textContent = (hasApprox ? '~' : '') + value.toLocaleString('tr-TR') + (hasScale ? '/100' : ''); if (progress < 1) window.requestAnimationFrame(frame); } window.requestAnimationFrame(frame); }); }
+		function bindQueueActions() { bindPreviewButtons(); bindSkipButtons(); bindRegenerateButtons(); bindPublishButtons(); }
+		function bindPreviewButtons() { document.querySelectorAll('.aiseo-ap-preview-btn').forEach((btn) => { if (btn._boundPreview) return; btn._boundPreview = true; btn.addEventListener('click', () => { try { openDrawer(JSON.parse(btn.dataset.preview || '{}')); } catch (e) { openDrawer({ title: 'Onizleme hazir degil', excerpt: 'Icerik onizleme verisi okunamadi.' }); } }); }); }
+		function bindSkipButtons() { document.querySelectorAll('.aiseo-ap-skip-btn').forEach((btn) => { if (btn._boundSkip) return; btn._boundSkip = true; btn.addEventListener('click', async () => { const postId = btn.dataset.postId; UI.loading(btn, true); try { await API.skipAutoPublisherPost(postId, true); const row = btn.closest('tr'); if (row) row.remove(); if (!document.querySelector('#aiseo-ap-queue-body tr')) renderQueue([]); UI.notice('aiseo-ap-notice', 'Yazi kuyruktan cikarildi.', 'success'); } catch (e) { UI.notice('aiseo-ap-notice', e.message || i18n.error, 'error'); } finally { UI.loading(btn, false); } }); }); }
+		function bindRegenerateButtons() { document.querySelectorAll('.aiseo-ap-regenerate-btn').forEach((btn) => { if (btn._boundRegen) return; btn._boundRegen = true; btn.addEventListener('click', async () => { const postId = btn.dataset.postId; if (!postId) return; UI.loading(btn, true); try { await API.regeneratePost(postId); UI.notice('aiseo-ap-notice', 'Icerik yeniden uretim icin kuyruga alindi.', 'success'); } catch (e) { UI.notice('aiseo-ap-notice', e.message || i18n.error, 'error'); } finally { UI.loading(btn, false); } }); }); }
+		function bindPublishButtons() { document.querySelectorAll('.aiseo-ap-publish-btn').forEach((btn) => { if (btn._boundPublish) return; btn._boundPublish = true; btn.addEventListener('click', async () => { if (btn.disabled) return; if (!confirm('Siradaki taslagi hemen yayinlamak istiyor musunuz?')) return; await runQueueTrigger(btn); }); }); }
+		async function runQueueTrigger(buttonEl) { UI.loading(buttonEl, true); UI.notice('aiseo-ap-notice', 'Isleniyor, lutfen bekleyin...', 'info'); try { const res = await API.triggerAutoPublisher(); const data = res.data || {}; const msg = res.message || 'Tamamlandi.'; const suffix = data.seo_score ? ' (SEO: ' + data.seo_score + ', Okunabilirlik: ' + data.readability_score + ')' : ''; UI.notice('aiseo-ap-notice', msg + suffix, 'success'); setTimeout(() => window.location.reload(), 1800); } catch (e) { UI.notice('aiseo-ap-notice', e.message || i18n.error, 'error'); } finally { UI.loading(buttonEl, false); } }
+		function scoreTone(score) { if (score >= 80) return 'good'; if (score >= 60) return 'warn'; if (score > 0) return 'bad'; return 'idle'; }
+		function estimateTraffic(item) { const seo = parseInt(item.seo_score || 0, 10); const read = parseInt(item.read_score || 0, 10); if (seo <= 0 && read <= 0) return 0; return Math.max(15, Math.round((Math.max(seo, 0) * 0.9) + (Math.max(read, 0) * 0.55))); }
+		function estimateKeywordVolume(item) { const title = String(item.title || '').trim(); if (!title) return 0; const wordCount = Math.max(1, title.split(/\\s+/).length); return Math.min(9800, Math.round((title.length * 28) + (wordCount * 160))); }
+		function estimateConfidence(item) { if (item.score_fail) return { label: 'Dusuk', tone: 'bad' }; if (parseInt(item.seo_score || 0, 10) >= 80 && parseInt(item.read_score || 0, 10) >= 70) return { label: 'Yuksek', tone: 'good' }; if (parseInt(item.attempts || 0, 10) > 0) return { label: 'Orta', tone: 'warn' }; return { label: 'Hazirlaniyor', tone: 'idle' }; }
+		function buildPreviewData(item) { const confidence = estimateConfidence(item); return { id: parseInt(item.id || 0, 10), title: item.title || 'Basliksiz taslak', excerpt: 'Icerik onizlemesi ilk kayitli metinle sinirlidir. Detayli duzenleme icin taslagi acabilirsiniz.', meta: item.score_fail || 'Meta description bilgisi su an kuyruk verisinde bulunmuyor.', seoScore: parseInt(item.seo_score || 0, 10), readScore: parseInt(item.read_score || 0, 10), traffic: estimateTraffic(item), keywordVolume: estimateKeywordVolume(item), confidence: confidence.label, confidenceTone: confidence.tone, faqCount: 0, internalLinks: [], editUrl: item.edit_url || '#' }; }
+		function queueRowHtmlEnhanced(item, index) { const categories = (item.categories || []).join(', ') || '--'; const seoScore = parseInt(item.seo_score || 0, 10); const readScore = parseInt(item.read_score || 0, 10); const traffic = estimateTraffic(item); const keywordVolume = estimateKeywordVolume(item); const confidence = estimateConfidence(item); const statusLabel = item.score_fail ? 'Basarisiz' : (parseInt(item.attempts || 0, 10) > 0 ? 'SEO Optimize' : 'Bekliyor'); const statusTone = item.score_fail ? 'bad' : (parseInt(item.attempts || 0, 10) > 0 ? 'warn' : 'idle'); const preview = buildPreviewData(item); const lastAction = item.date ? escapeHtml(String(item.date)) : 'Henuz yok'; return '<tr data-post-id=\"' + escapeHtml(item.id) + '\"><td><div class=\"aiseo-ap-row-title\"><a href=\"' + escapeHtml(item.edit_url) + '\">' + escapeHtml(item.title || 'Basliksiz taslak') + '</a><span class=\"aiseo-ap-row-meta\">' + escapeHtml((index + 1) + '. sirada') + '</span></div></td><td>' + escapeHtml(categories) + '</td><td><span class=\"aiseo-ap-soft-badge aiseo-ap-soft-badge--' + scoreTone(seoScore) + '\">' + (seoScore > 0 ? escapeHtml(seoScore) : '--') + '</span></td><td><span class=\"aiseo-ap-soft-badge aiseo-ap-soft-badge--' + scoreTone(readScore) + '\">' + (readScore > 0 ? escapeHtml(readScore) : '--') + '</span></td><td>' + (traffic ? '~' + escapeHtml(traffic) : '--') + '</td><td>' + (keywordVolume ? escapeHtml(keywordVolume) : '--') + '</td><td><span class=\"aiseo-ap-soft-badge aiseo-ap-soft-badge--' + confidence.tone + '\">' + escapeHtml(confidence.label) + '</span></td><td>' + lastAction + '</td><td><span class=\"aiseo-ap-status-badge aiseo-ap-status-badge--' + statusTone + '\"' + (item.score_fail ? ' title=\"' + escapeHtml(item.score_fail) + '\"' : '') + '>' + escapeHtml(statusLabel) + '</span></td><td><div class=\"aiseo-ap-row-actions\"><button type=\"button\" class=\"aiseo-ap-icon-btn aiseo-ap-preview-btn\" title=\"Onizle\" data-preview=\"' + escapeHtml(JSON.stringify(preview)) + '\"><span class=\"dashicons dashicons-visibility\"></span></button><a href=\"' + escapeHtml(item.edit_url) + '\" class=\"aiseo-ap-icon-btn\" title=\"Duzenle\"><span class=\"dashicons dashicons-edit\"></span></a><button type=\"button\" class=\"aiseo-ap-icon-btn aiseo-ap-regenerate-btn\" data-post-id=\"' + escapeHtml(item.id) + '\" title=\"Yeniden Uret\"><span class=\"dashicons dashicons-update\"></span></button><button type=\"button\" class=\"aiseo-ap-icon-btn aiseo-ap-publish-btn' + (index === 0 ? '' : ' is-disabled') + '\" data-post-id=\"' + escapeHtml(item.id) + '\" title=\"' + escapeHtml(index === 0 ? 'Hemen Yayinla' : 'Sadece ilk siradaki draft manuel calistirilabilir') + '\"' + (index === 0 ? '' : ' disabled') + '><span class=\"dashicons dashicons-megaphone\"></span></button><button type=\"button\" class=\"aiseo-ap-icon-btn aiseo-ap-skip-btn\" data-post-id=\"' + escapeHtml(item.id) + '\" title=\"Kuyruktan Cikar\"><span class=\"dashicons dashicons-dismiss\"></span></button></div></td></tr>'; }
+		function buildQueueTableEnhanced(queue) { return '<div class=\"aiseo-ap-table-scroller\"><table class=\"aiseo-table aiseo-ap-table\"><thead><tr><th>Baslik</th><th>Kategori</th><th>SEO</th><th>Okunabilirlik</th><th>Tahmini Trafik</th><th>Keyword Volume</th><th>AI Confidence</th><th>Son Islem</th><th>Durum</th><th>Aksiyonlar</th></tr></thead><tbody id=\"aiseo-ap-queue-body\">' + queue.map((item, index) => queueRowHtmlEnhanced(item, index)).join('') + '</tbody></table></div>'; }
+		function renderQueue(queue) { if (!queueWrap) return; if (!queue.length) { queueWrap.innerHTML = '<div class=\"aiseo-ap-empty-state\"><div class=\"aiseo-ap-empty-state__icon\"><span class=\"dashicons dashicons-saved\"></span></div><h3>Kuyruk temiz gorunuyor</h3><p>Yeni draft olusturuldugunda burada otomatik olarak pipeline kartlari gorunecek.</p><button type=\"button\" class=\"button button-primary aiseo-ap-proxy-action\" data-target=\"aiseo-ap-trigger\">AI Queue Baslat</button></div>'; initProxyActions(); return; } queueWrap.innerHTML = buildQueueTableEnhanced(queue); bindQueueActions(); }
+	}
+
 	/* ------------------------------------------------------------------ */
 	/* API Module                                                           */
 	/* ------------------------------------------------------------------ */
@@ -2361,7 +2468,7 @@
 			initInternalLinks();
 		}
 		if (page === 'aiseo-auto-publisher') {
-			initAutoPublisher();
+			initAutoPublisherEnhanced();
 		}
 		if (page === 'aiseo-settings') {
 			initSettings();
