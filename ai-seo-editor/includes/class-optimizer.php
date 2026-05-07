@@ -74,7 +74,7 @@ class AISEO_Optimizer {
 			case 'post_title':
 				return (bool) wp_update_post( [
 					'ID'         => $post_id,
-					'post_title' => sanitize_text_field( $new_value ),
+					'post_title' => aiseo_normalize_seo_title( $new_value ),
 				] );
 
 			case 'post_content':

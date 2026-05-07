@@ -160,6 +160,7 @@ class AISEO_Auto_Publisher {
 		try {
 			$content = $post->post_content;
 			$title   = $post->post_title;
+			$original_content = (string) $content;
 
 			// Step 1: Generate content if post body is empty/short
 			if ( $settings['auto_generate'] && mb_strlen( wp_strip_all_tags( $content ) ) < 200 ) {
@@ -168,7 +169,7 @@ class AISEO_Auto_Publisher {
 					return $gen;
 				}
 				$title   = $gen['title'];
-				$content = $gen['content'];
+				$content = aiseo_preserve_bracket_blocks( $original_content, (string) $gen['content'] );
 
 				wp_update_post( [ 'ID' => $post_id, 'post_title' => $title, 'post_content' => $content ] );
 
@@ -198,7 +199,7 @@ class AISEO_Auto_Publisher {
 				$opt = $this->optimize_post( $post_id, $settings, $content, $title );
 				if ( $opt['success'] ) {
 					$title   = $opt['title'];
-					$content = $opt['content'];
+					$content = aiseo_preserve_bracket_blocks( $original_content, (string) $opt['content'] );
 				}
 			}
 
@@ -206,9 +207,11 @@ class AISEO_Auto_Publisher {
 			if ( $settings['internal_links_count'] > 0 ) {
 				$linked = $this->add_internal_links( $post_id, $settings['internal_links_count'], $content );
 				if ( $linked ) {
-					$content = $linked;
+					$content = aiseo_preserve_bracket_blocks( $original_content, $linked );
 				}
 			}
+
+			$content = aiseo_preserve_bracket_blocks( $original_content, $content );
 
 			wp_update_post( [ 'ID' => $post_id, 'post_title' => $title, 'post_content' => $content ] );
 			$this->logger->invalidate_cache( $post_id );
@@ -316,7 +319,7 @@ class AISEO_Auto_Publisher {
 				return [ 'success' => false, 'message' => 'Optimizasyon içerik döndürmedi.' ];
 			}
 
-			$new_title   = sanitize_text_field( $result['title'] ?? $title );
+			$new_title   = aiseo_normalize_seo_title( (string) ( $result['title'] ?? $title ) );
 			$new_content = wp_kses_post( $result['content'] );
 			$new_meta    = sanitize_textarea_field( $result['meta_description'] ?? $meta );
 			$tokens      = (int) ( $result['tokens_used'] ?? 0 );

@@ -63,7 +63,7 @@ class AISEO_OpenAI_Client {
 		$messages = [
 			[
 				'role'    => 'system',
-				'content' => 'Sen bir SEO baslik uzmanisin. Odak kelimeyi iceren, 50-60 karakter arasinda, net ve tiklanabilir bir SEO basligi uret. YALNIZCA baslik metnini dondur.',
+				'content' => 'Sen bir SEO baslik uzmanisin. Odak kelimeyi iceren, net ve tiklanabilir bir SEO basligi uret. Tercihen 45-55 karakter araliginda kal, 58 karakteri ASLA gecme. YALNIZCA baslik metnini dondur.',
 			],
 			[
 				'role'    => 'user',
@@ -74,7 +74,7 @@ class AISEO_OpenAI_Client {
 		$response = $this->chat_completion( $messages, 120, 0.6 );
 		return [
 			'before' => $title,
-			'after'  => trim( $response['content'] ?? '' ),
+			'after'  => aiseo_normalize_seo_title( trim( (string) ( $response['content'] ?? '' ) ) ),
 			'field'  => 'post_title',
 		];
 	}
@@ -669,6 +669,8 @@ Kurallar: Icerik {$lang_str} dilinde olacak, ton: {$tone}, yaklasik {$target_wc}
 				$parsed['content'] = $this->restore_bracket_blocks( $clean_content, $locked_blocks );
 			}
 		}
+
+		$parsed['title'] = aiseo_normalize_seo_title( (string) ( $parsed['title'] ?? $current['title'] ) );
 
 		return $parsed;
 	}

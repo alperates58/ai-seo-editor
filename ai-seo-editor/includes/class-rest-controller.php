@@ -328,7 +328,7 @@ class AISEO_Rest_Controller {
 			return new WP_Error( 'aiseo_optimize_error', $error, [ 'status' => 500 ] );
 		}
 
-		$title   = sanitize_text_field( $result['title'] ?? $title_input );
+		$title   = aiseo_normalize_seo_title( (string) ( $result['title'] ?? $title_input ) );
 		$meta    = sanitize_textarea_field( $result['meta_description'] ?? $meta_input );
 		$content = wp_kses_post( $result['content'] ?? $content_input );
 		$tags    = array_map( 'sanitize_text_field', is_array( $result['suggested_tags'] ?? null ) ? $result['suggested_tags'] : [] );
@@ -1041,7 +1041,7 @@ class AISEO_Rest_Controller {
 			return new WP_Error( 'aiseo_optimize_error', $error, [ 'status' => 500 ] );
 		}
 
-		$title   = sanitize_text_field( $result['title'] ?? $title_before );
+		$title   = aiseo_normalize_seo_title( (string) ( $result['title'] ?? $title_before ) );
 		$meta    = sanitize_textarea_field( $result['meta_description'] ?? $meta_before );
 		$content = wp_kses_post( $result['content'] ?? $content_before );
 		$tags    = array_map( 'sanitize_text_field', is_array( $result['suggested_tags'] ?? null ) ? $result['suggested_tags'] : [] );

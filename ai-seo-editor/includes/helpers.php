@@ -147,6 +147,30 @@ function aiseo_truncate( string $text, int $length = 160 ): string {
 	return mb_substr( $text, 0, $length - 3 ) . '...';
 }
 
+function aiseo_normalize_seo_title( string $title, int $max_length = 58 ): string {
+	$title = sanitize_text_field( $title );
+	$title = trim( preg_replace( '/\s+/u', ' ', $title ) ?? $title );
+
+	if ( $title === '' ) {
+		return '';
+	}
+
+	if ( mb_strlen( $title ) <= $max_length ) {
+		return $title;
+	}
+
+	$trimmed = trim( mb_substr( $title, 0, $max_length + 1 ) );
+	$last_space = mb_strrpos( $trimmed, ' ' );
+
+	if ( false !== $last_space && $last_space >= (int) floor( $max_length * 0.65 ) ) {
+		$trimmed = trim( mb_substr( $trimmed, 0, $last_space ) );
+	} else {
+		$trimmed = trim( mb_substr( $trimmed, 0, $max_length ) );
+	}
+
+	return rtrim( $trimmed, " \t\n\r\0\x0B-:|,;/\\" );
+}
+
 function aiseo_preserve_bracket_blocks( string $source, string $target ): string {
 	if ( ! preg_match_all( '/\[[^\[\]\r\n]{1,800}\]/u', $source, $matches ) ) {
 		return $target;
