@@ -553,7 +553,9 @@ if ( empty( $activity_items ) ) {
 			</div>
 		</section>
 
-		<aside class="aiseo-card aiseo-ap-panel aiseo-ap-side">
+	</div>
+
+	<section class="aiseo-card aiseo-ap-panel aiseo-ap-analytics">
 			<div class="aiseo-ap-panel__header">
 				<div>
 					<h2><?php esc_html_e( 'Activity & Analytics', 'ai-seo-editor' ); ?></h2>
@@ -561,7 +563,8 @@ if ( empty( $activity_items ) ) {
 				</div>
 			</div>
 
-			<div class="aiseo-ap-side-block">
+			<div class="aiseo-ap-analytics-grid">
+				<div class="aiseo-ap-side-block">
 				<h3><?php esc_html_e( 'AI Activity Feed', 'ai-seo-editor' ); ?></h3>
 				<div class="aiseo-ap-timeline">
 					<?php foreach ( $activity_items as $activity ) : ?>
@@ -607,8 +610,8 @@ if ( empty( $activity_items ) ) {
 					</div>
 				<?php endif; ?>
 			</div>
-		</aside>
-	</div>
+		</div>
+	</section>
 
 	<div class="aiseo-ap-floating-bar">
 		<button type="button" class="button button-primary aiseo-ap-proxy-action" data-target="aiseo-ap-trigger"><?php esc_html_e( 'Simdi Calistir', 'ai-seo-editor' ); ?></button>

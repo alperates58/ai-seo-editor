@@ -1156,9 +1156,14 @@
 
 .aiseo-ap-dashboard {
 	display: grid;
-	grid-template-columns: minmax(340px, 1.15fr) minmax(480px, 1.6fr) minmax(280px, .95fr);
+	grid-template-columns: minmax(320px, 360px) minmax(0, 1fr);
 	gap: 20px;
 	align-items: start;
+}
+
+.aiseo-ap-config {
+	position: sticky;
+	top: 32px;
 }
 
 .aiseo-ap-panel {
@@ -1668,9 +1673,15 @@
 	line-height: 1.6;
 }
 
+.aiseo-ap-analytics {
+	margin-top: 20px;
+}
+
+.aiseo-ap-analytics-grid,
 .aiseo-ap-side {
 	display: grid;
 	gap: 18px;
+	grid-template-columns: minmax(0, .95fr) minmax(0, 1.25fr);
 }
 
 .aiseo-ap-side-block {
@@ -1929,21 +1940,6 @@
 	.aiseo-ap-kpis {
 		grid-template-columns: repeat(3, minmax(0, 1fr));
 	}
-
-	.aiseo-ap-dashboard {
-		grid-template-columns: minmax(320px, .95fr) minmax(0, 1.35fr);
-	}
-
-	.aiseo-ap-side {
-		grid-column: 1 / -1;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-	}
-}
-
-@media (min-width: 1681px) {
-	.aiseo-ap-dashboard {
-		grid-template-columns: minmax(320px, 1.05fr) minmax(0, 1.5fr) minmax(300px, .95fr);
-	}
 }
 
 @media (max-width: 1024px) {
@@ -1953,6 +1949,7 @@
 
 	.aiseo-ap-kpis,
 	.aiseo-ap-dashboard,
+	.aiseo-ap-analytics-grid,
 	.aiseo-ap-side,
 	.aiseo-ap-drawer__metrics,
 	.aiseo-ap-drawer__split {
@@ -1975,6 +1972,7 @@
 
 	.aiseo-ap-kpis,
 	.aiseo-ap-dashboard,
+	.aiseo-ap-analytics-grid,
 	.aiseo-ap-side,
 	.aiseo-ap-drawer__metrics,
 	.aiseo-ap-drawer__split {
@@ -1984,6 +1982,10 @@
 	.aiseo-ap-actions {
 		position: static;
 		background: transparent;
+	}
+
+	.aiseo-ap-config {
+		position: static;
 	}
 
 	.aiseo-ap-category-toolbar,
