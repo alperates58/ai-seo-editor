@@ -143,6 +143,37 @@ class AISEO_Rest_Controller {
 			'callback'            => [ $this, 'test_api_key' ],
 			'permission_callback' => [ $this, 'check_permissions' ],
 		] );
+
+		register_rest_route( self::NAMESPACE, '/auto-publisher/settings', [
+			[
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => [ $this, 'get_auto_publisher_settings' ],
+				'permission_callback' => [ $this, 'check_permissions' ],
+			],
+			[
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => [ $this, 'save_auto_publisher_settings' ],
+				'permission_callback' => [ $this, 'check_permissions' ],
+			],
+		] );
+
+		register_rest_route( self::NAMESPACE, '/auto-publisher/trigger', [
+			'methods'             => WP_REST_Server::CREATABLE,
+			'callback'            => [ $this, 'trigger_auto_publisher' ],
+			'permission_callback' => [ $this, 'check_permissions' ],
+		] );
+
+		register_rest_route( self::NAMESPACE, '/auto-publisher/queue', [
+			'methods'             => WP_REST_Server::READABLE,
+			'callback'            => [ $this, 'get_auto_publisher_queue' ],
+			'permission_callback' => [ $this, 'check_permissions' ],
+		] );
+
+		register_rest_route( self::NAMESPACE, '/auto-publisher/skip/(?P<post_id>\d+)', [
+			'methods'             => WP_REST_Server::CREATABLE,
+			'callback'            => [ $this, 'skip_auto_publisher_post' ],
+			'permission_callback' => [ $this, 'check_permissions' ],
+		] );
 	}
 
 	public function check_permissions( ?WP_REST_Request $request = null ): bool|WP_Error {
@@ -837,6 +868,57 @@ class AISEO_Rest_Controller {
 					$error ?: __( 'Bilinmeyen hata.', 'ai-seo-editor' )
 				)
 		);
+	}
+
+	public function get_auto_publisher_settings( WP_REST_Request $request ): WP_REST_Response {
+		$ap = new AISEO_Auto_Publisher( $this->settings, $this->logger );
+		return $this->ok( array_merge( $ap->get_settings(), [ 'next_run' => $ap->get_next_scheduled() ] ) );
+	}
+
+	public function save_auto_publisher_settings( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+		$body = $request->get_json_params() ?: $request->get_body_params();
+		if ( empty( $body ) ) {
+			return new WP_Error( 'aiseo_missing_param', __( 'Ayar verisi boş.', 'ai-seo-editor' ), [ 'status' => 422 ] );
+		}
+
+		$ap = new AISEO_Auto_Publisher( $this->settings, $this->logger );
+		$ap->save_settings( $body );
+
+		return $this->ok(
+			array_merge( $ap->get_settings(), [ 'next_run' => $ap->get_next_scheduled() ] ),
+			__( 'Otomatik yayın ayarları kaydedildi.', 'ai-seo-editor' )
+		);
+	}
+
+	public function trigger_auto_publisher( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+		$this->check_token_budget();
+		$ap     = new AISEO_Auto_Publisher( $this->settings, $this->logger );
+		$result = $ap->run_manual();
+
+		if ( ! $result['success'] ) {
+			return new WP_Error( 'aiseo_ap_error', $result['message'] ?? __( 'Otomatik yayın başarısız.', 'ai-seo-editor' ), [ 'status' => 500 ] );
+		}
+
+		return $this->ok( $result, $result['message'] ?? __( 'Yazı yayınlandı.', 'ai-seo-editor' ) );
+	}
+
+	public function get_auto_publisher_queue( WP_REST_Request $request ): WP_REST_Response {
+		$ap    = new AISEO_Auto_Publisher( $this->settings, $this->logger );
+		$limit = max( 1, min( 50, absint( $request->get_param( 'limit' ) ?? 20 ) ) );
+		return $this->ok( [ 'queue' => $ap->get_queue( $limit ) ] );
+	}
+
+	public function skip_auto_publisher_post( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+		$post_id = absint( $request->get_param( 'post_id' ) );
+		if ( ! $this->post_exists( $post_id ) ) {
+			return $this->not_found();
+		}
+
+		$skip = (bool) ( $request->get_param( 'skip' ) ?? true );
+		$ap   = new AISEO_Auto_Publisher( $this->settings, $this->logger );
+		$skip ? $ap->skip_post( $post_id ) : $ap->unskip_post( $post_id );
+
+		return $this->ok( [ 'post_id' => $post_id, 'skipped' => $skip ], $skip ? 'Yazı kuyruktan çıkarıldı.' : 'Yazı kuyruğa eklendi.' );
 	}
 
 	private function auto_apply_internal_links( int $post_id, int $limit = 3 ): int {

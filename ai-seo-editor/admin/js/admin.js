@@ -71,7 +71,12 @@
 		getSettings:      ()           => API.request('/settings'),
 		saveSettings:     (data)       => API.request('/settings', 'POST', data),
 		testKey:          (data)       => API.request('/settings/test-key', 'POST', data || {}),
-		getDashboard:     ()           => API.request('/dashboard'),
+		getDashboard:          ()       => API.request('/dashboard'),
+		getAutoPublisherSettings: ()   => API.request('/auto-publisher/settings'),
+		saveAutoPublisherSettings: (d) => API.request('/auto-publisher/settings', 'POST', d),
+		triggerAutoPublisher:  ()      => API.request('/auto-publisher/trigger', 'POST'),
+		getAutoPublisherQueue: ()      => API.request('/auto-publisher/queue'),
+		skipAutoPublisherPost: (pid, skip) => API.request('/auto-publisher/skip/' + pid, 'POST', { skip: !!skip }),
 	};
 
 	/* ------------------------------------------------------------------ */
@@ -2183,6 +2188,155 @@
 	}
 
 	/* ------------------------------------------------------------------ */
+	/* Auto Publisher                                                       */
+	/* ------------------------------------------------------------------ */
+	function initAutoPublisher() {
+		const saveBtn    = document.getElementById('aiseo-ap-save');
+		const triggerBtn = document.getElementById('aiseo-ap-trigger');
+		const refreshBtn = document.getElementById('aiseo-ap-refresh-queue');
+		const enabledEl  = document.getElementById('aiseo-ap-enabled');
+		const statusLbl  = document.getElementById('aiseo-ap-status-label');
+
+		function getFormData() {
+			const categoryEls = document.querySelectorAll('#aiseo-ap-categories option:checked');
+			return {
+				enabled:                document.getElementById('aiseo-ap-enabled')?.checked || false,
+				interval_hours:         parseInt(document.getElementById('aiseo-ap-interval')?.value) || 24,
+				min_seo_score:          parseInt(document.getElementById('aiseo-ap-min-seo')?.value) || 70,
+				min_readability_score:  parseInt(document.getElementById('aiseo-ap-min-read')?.value) || 60,
+				category_ids:           Array.from(categoryEls).map((o) => parseInt(o.value)).filter(Boolean),
+				internal_links_count:   parseInt(document.getElementById('aiseo-ap-links')?.value) || 3,
+				target_words:           parseInt(document.getElementById('aiseo-ap-words')?.value) || 1000,
+				tone:                   document.getElementById('aiseo-ap-tone')?.value || 'professional',
+				include_faq:            document.getElementById('aiseo-ap-faq')?.checked || false,
+				auto_generate:          document.getElementById('aiseo-ap-auto-generate')?.checked || false,
+				optimize_before_publish: document.getElementById('aiseo-ap-optimize')?.checked || false,
+			};
+		}
+
+		if (enabledEl && statusLbl) {
+			enabledEl.addEventListener('change', () => {
+				statusLbl.textContent = enabledEl.checked ? 'Aktif' : 'Pasif';
+				statusLbl.className   = 'aiseo-ap-status-label ' + (enabledEl.checked ? 'active' : 'inactive');
+			});
+		}
+
+		if (saveBtn) {
+			saveBtn.addEventListener('click', async () => {
+				UI.loading(saveBtn, true);
+				try {
+					const res = await API.saveAutoPublisherSettings(getFormData());
+					const d = res.data || {};
+					const nextRunEl = document.querySelector('#aiseo-ap-interval + p.description');
+					if (nextRunEl && d.next_run) {
+						nextRunEl.textContent = 'Sonraki çalışma: ' + d.next_run;
+					} else if (nextRunEl) {
+						nextRunEl.textContent = 'Henüz zamanlanmamış.';
+					}
+					UI.notice('aiseo-ap-notice', res.message || 'Ayarlar kaydedildi.', 'success');
+				} catch (e) {
+					UI.notice('aiseo-ap-notice', e.message || i18n.error, 'error');
+				} finally {
+					UI.loading(saveBtn, false);
+				}
+			});
+		}
+
+		if (triggerBtn) {
+			triggerBtn.addEventListener('click', async () => {
+				if (!confirm('Kuyruktan bir taslak şimdi işlenip yayınlansın mı? Bu işlem birkaç dakika sürebilir.')) return;
+				UI.loading(triggerBtn, true);
+				UI.notice('aiseo-ap-notice', 'İşleniyor, lütfen bekleyin...', 'info');
+				try {
+					const res = await API.triggerAutoPublisher();
+					const d = res.data || {};
+					const msg = res.message || 'Tamamlandı.';
+					UI.notice('aiseo-ap-notice', msg + (d.seo_score ? ' (SEO: ' + d.seo_score + ', Okunabilirlik: ' + d.readability_score + ')' : ''), 'success');
+					setTimeout(() => window.location.reload(), 2000);
+				} catch (e) {
+					UI.notice('aiseo-ap-notice', e.message || i18n.error, 'error');
+				} finally {
+					UI.loading(triggerBtn, false);
+				}
+			});
+		}
+
+		if (refreshBtn) {
+			refreshBtn.addEventListener('click', async () => {
+				UI.loading(refreshBtn, true);
+				try {
+					const res = await API.getAutoPublisherQueue();
+					const queue = res.data?.queue || [];
+					const tbody = document.getElementById('aiseo-ap-queue-body');
+					const wrap  = document.getElementById('aiseo-ap-queue-wrap');
+					if (!tbody && wrap) {
+						if (queue.length === 0) {
+							wrap.innerHTML = '<p class="aiseo-ap-empty">Kuyrukta taslak yok.</p>';
+						} else {
+							wrap.innerHTML = buildQueueTable(queue);
+							bindSkipButtons();
+						}
+					} else if (tbody) {
+						if (queue.length === 0) {
+							const table = tbody.closest('table');
+							if (table) table.outerHTML = '<p class="aiseo-ap-empty">Kuyrukta taslak yok.</p>';
+						} else {
+							tbody.innerHTML = queue.map(queueRowHtml).join('');
+							bindSkipButtons();
+						}
+					}
+				} catch (e) {
+					UI.notice('aiseo-ap-notice', e.message || i18n.error, 'error');
+				} finally {
+					UI.loading(refreshBtn, false);
+				}
+			});
+		}
+
+		bindSkipButtons();
+
+		function bindSkipButtons() {
+			document.querySelectorAll('.aiseo-ap-skip-btn').forEach((btn) => {
+				if (btn._bound) return;
+				btn._bound = true;
+				btn.addEventListener('click', async () => {
+					const postId = btn.dataset.postId;
+					UI.loading(btn, true);
+					try {
+						await API.skipAutoPublisherPost(postId, true);
+						const row = btn.closest('tr');
+						if (row) row.remove();
+					} catch (e) {
+						UI.notice('aiseo-ap-notice', e.message || i18n.error, 'error');
+					} finally {
+						UI.loading(btn, false);
+					}
+				});
+			});
+		}
+
+		function queueRowHtml(item) {
+			const cats  = (item.categories || []).join(', ') || '—';
+			const fail  = item.score_fail
+				? '<span class="aiseo-badge aiseo-badge--red" title="' + escapeHtml(item.score_fail) + '">Puan Düşük</span>'
+				: '<span class="aiseo-badge aiseo-badge--none">Bekliyor</span>';
+			return '<tr data-post-id="' + escapeHtml(item.id) + '">' +
+				'<td><a href="' + escapeHtml(item.edit_url) + '">' + escapeHtml(item.title) + '</a></td>' +
+				'<td>' + escapeHtml(cats) + '</td>' +
+				'<td>' + escapeHtml(item.attempts || '0') + '</td>' +
+				'<td>' + fail + '</td>' +
+				'<td><button type="button" class="button button-small aiseo-ap-skip-btn" data-post-id="' + escapeHtml(item.id) + '">Atla</button></td>' +
+				'</tr>';
+		}
+
+		function buildQueueTable(queue) {
+			return '<table class="aiseo-table wp-list-table widefat fixed striped">' +
+				'<thead><tr><th>Başlık</th><th>Kategori</th><th>Deneme</th><th>Durum</th><th>İşlem</th></tr></thead>' +
+				'<tbody id="aiseo-ap-queue-body">' + queue.map(queueRowHtml).join('') + '</tbody></table>';
+		}
+	}
+
+	/* ------------------------------------------------------------------ */
 	/* Router                                                               */
 	/* ------------------------------------------------------------------ */
 	function init() {
@@ -2205,6 +2359,9 @@
 		}
 		if (page === 'aiseo-links') {
 			initInternalLinks();
+		}
+		if (page === 'aiseo-auto-publisher') {
+			initAutoPublisher();
 		}
 		if (page === 'aiseo-settings') {
 			initSettings();

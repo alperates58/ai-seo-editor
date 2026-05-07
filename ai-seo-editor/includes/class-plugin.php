@@ -31,6 +31,9 @@ class AISEO_Plugin {
 			$admin->init();
 		}
 
+		$auto_publisher = new AISEO_Auto_Publisher( $this->settings, $this->logger );
+		$auto_publisher->init();
+
 		$rest = new AISEO_Rest_Controller( $this->settings, $this->logger );
 		add_action( 'rest_api_init', [ $rest, 'register_routes' ] );
 

@@ -92,6 +92,15 @@ class AISEO_Admin {
 
 		add_submenu_page(
 			$this->menu_slug,
+			__( 'Otomatik Yayın', 'ai-seo-editor' ),
+			__( 'Otomatik Yayın', 'ai-seo-editor' ),
+			'manage_options',
+			'aiseo-auto-publisher',
+			[ $this, 'page_auto_publisher' ]
+		);
+
+		add_submenu_page(
+			$this->menu_slug,
 			__( 'Ayarlar', 'ai-seo-editor' ),
 			__( 'Ayarlar', 'ai-seo-editor' ),
 			'manage_options',
@@ -182,6 +191,7 @@ class AISEO_Admin {
 			'ai-seo-editor_page_aiseo-agent',
 			'ai-seo-editor_page_aiseo-generator',
 			'ai-seo-editor_page_aiseo-links',
+			'ai-seo-editor_page_aiseo-auto-publisher',
 			'ai-seo-editor_page_aiseo-settings',
 			'ai-seo-editor_page_aiseo-github',
 			'ai-seo-editor_page_aiseo-logs',
@@ -359,6 +369,21 @@ class AISEO_Admin {
 			'posts_per_page' => 50,
 		] );
 		$this->render_template( 'internal-links', [ 'posts' => $posts ] );
+	}
+
+	public function page_auto_publisher(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Yetkiniz yok.', 'ai-seo-editor' ) );
+		}
+
+		$auto_publisher = new AISEO_Auto_Publisher( $this->settings, $this->logger );
+		$ap_settings    = $auto_publisher->get_settings();
+		$categories     = get_categories( [ 'hide_empty' => false ] );
+		$queue          = $auto_publisher->get_queue( 20 );
+		$history        = $auto_publisher->get_history( 20 );
+		$next_run       = $auto_publisher->get_next_scheduled();
+
+		$this->render_template( 'auto-publisher', compact( 'auto_publisher', 'ap_settings', 'categories', 'queue', 'history', 'next_run' ) );
 	}
 
 	public function page_settings(): void {
