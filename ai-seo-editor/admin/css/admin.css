@@ -1155,10 +1155,14 @@
 .aiseo-ap-kpi--sky { color: var(--aiseo-ap-sky); }
 
 .aiseo-ap-dashboard {
-	display: grid;
-	grid-template-columns: minmax(0, 1fr);
+	display: flex;
+	flex-direction: column;
 	gap: 20px;
 	align-items: start;
+}
+
+.aiseo-ap-dashboard > .aiseo-ap-panel {
+	width: 100%;
 }
 
 .aiseo-ap-config {
