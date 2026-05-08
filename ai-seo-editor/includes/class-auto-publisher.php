@@ -573,22 +573,36 @@ class AISEO_Auto_Publisher {
 			'meta_query'     => [ [ 'key' => '_aiseo_auto_published', 'compare' => 'EXISTS' ] ],
 		] );
 
-		return empty( $posts ) ? [] : wp_get_post_categories( (int) $posts[0] );
+		if ( empty( $posts ) ) {
+			return [];
+		}
+
+		$root_ids = [];
+		foreach ( wp_get_post_categories( (int) $posts[0] ) as $cat_id ) {
+			$root_ids[] = $this->get_root_category_id_for( (int) $cat_id );
+		}
+		return array_unique( $root_ids );
 	}
 
-	private function get_primary_category_id( int $post_id ): int {
+	private function get_root_category_id( int $post_id ): int {
 		$categories = wp_get_post_categories( $post_id );
 		if ( empty( $categories ) ) {
 			return 0;
 		}
 
+		// En derin alt kategoriyi bul, onun kök atasını döndür
 		usort( $categories, static function ( $a, $b ) {
 			$depth_a = count( get_ancestors( $a, 'category' ) );
 			$depth_b = count( get_ancestors( $b, 'category' ) );
 			return $depth_b <=> $depth_a;
 		} );
 
-		return (int) $categories[0];
+		return $this->get_root_category_id_for( (int) $categories[0] );
+	}
+
+	private function get_root_category_id_for( int $category_id ): int {
+		$ancestors = get_ancestors( $category_id, 'category' );
+		return empty( $ancestors ) ? $category_id : (int) end( $ancestors );
 	}
 
 	private function diversify_posts_by_category( array $posts, int $limit, array $avoid_category_ids = [] ): array {
@@ -597,7 +611,7 @@ class AISEO_Auto_Publisher {
 			if ( ! $post instanceof WP_Post ) {
 				continue;
 			}
-			$category_id = $this->get_primary_category_id( $post->ID );
+			$category_id = $this->get_root_category_id( $post->ID );
 			$buckets[ $category_id ][] = $post;
 		}
 
