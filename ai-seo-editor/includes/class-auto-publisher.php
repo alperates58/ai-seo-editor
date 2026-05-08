@@ -112,6 +112,16 @@ class AISEO_Auto_Publisher {
 		$next_run = wp_next_scheduled( self::CRON_HOOK );
 		if ( ! $next_run ) {
 			$this->schedule( (float) $settings['interval_hours'] );
+			return;
+		}
+
+		// Stuck transient detection: işlem 15+ dk sürüyorsa transient'ı temizle
+		$processing_id = get_transient( self::PROCESSING_TRANSIENT );
+		if ( $processing_id && $processing_id !== -1 ) {
+			$last_attempt = get_post_meta( (int) $processing_id, '_aiseo_auto_publish_last_attempt', true );
+			if ( $last_attempt && ( time() - strtotime( $last_attempt ) ) > 900 ) {
+				delete_transient( self::PROCESSING_TRANSIENT );
+			}
 		}
 	}
 
@@ -140,6 +150,9 @@ class AISEO_Auto_Publisher {
 	}
 
 	public function run_manual( int $post_id = 0 ): array {
+		if ( get_transient( self::PROCESSING_TRANSIENT ) ) {
+			return [ 'success' => false, 'message' => 'Şu anda başka bir yazı işleniyor, lütfen bekleyin.' ];
+		}
 		$settings = $this->get_settings();
 		$post     = $post_id > 0 ? get_post( $post_id ) : $this->get_next_draft( $settings );
 		if ( ! $post ) {
@@ -219,6 +232,9 @@ class AISEO_Auto_Publisher {
 			if ( $settings['auto_generate'] && mb_strlen( wp_strip_all_tags( $content ) ) < 200 ) {
 				$gen = $this->generate_content( $post_id, $settings );
 				if ( ! $gen['success'] ) {
+					update_post_meta( $post_id, '_aiseo_auto_publish_score_fail', 'İçerik üretimi başarısız: ' . ( $gen['message'] ?? 'AI hatası' ) );
+					delete_post_meta( $post_id, self::QUEUE_ORDER_META );
+					$this->logger->log_ai_operation( $post_id, 'auto_publish_skip', (string) $this->settings->get( 'openai_model' ), 0, 0, 'error', $gen['message'] ?? 'generate failed' );
 					return $gen;
 				}
 				$content = aiseo_preserve_bracket_blocks( $original_content, (string) $gen['content'] );
@@ -282,6 +298,7 @@ class AISEO_Auto_Publisher {
 					$read_score, $settings['min_readability_score']
 				);
 				update_post_meta( $post_id, '_aiseo_auto_publish_score_fail', $reason );
+				delete_post_meta( $post_id, self::QUEUE_ORDER_META );
 				$this->logger->log_ai_operation( $post_id, 'auto_publish_skip', (string) $this->settings->get( 'openai_model' ), 0, 0, 'error', $reason );
 				return [ 'success' => false, 'message' => $reason, 'seo_score' => $seo_score, 'readability_score' => $read_score ];
 			}
@@ -349,6 +366,7 @@ class AISEO_Auto_Publisher {
 		];
 
 		$client    = new AISEO_OpenAI_Client( $this->settings );
+		$client->set_timeout( 60 );
 		$generator = new AISEO_Article_Generator( $client, $this->logger );
 		return $generator->generate( $params );
 	}
@@ -366,6 +384,7 @@ class AISEO_Auto_Publisher {
 
 		try {
 			$client       = new AISEO_OpenAI_Client( $this->settings );
+			$client->set_timeout( 60 );
 			$meta         = $yoast->get_meta_description( $post_id );
 			$current_tags = wp_get_post_tags( $post_id, [ 'fields' => 'names' ] );
 			$result       = $client->optimize_full_post( $post_id, $keyword, $settings['tone'], $content, $title, $meta, $current_tags );
@@ -423,6 +442,7 @@ class AISEO_Auto_Publisher {
 	private function add_internal_links( int $post_id, int $limit, string $content ): ?string {
 		try {
 			$client      = new AISEO_OpenAI_Client( $this->settings );
+			$client->set_timeout( 60 );
 			$linker      = new AISEO_Internal_Linker( $client, $this->logger );
 			$suggestions = $linker->find_suggestions( $post_id );
 

@@ -12,6 +12,10 @@ class AISEO_OpenAI_Client {
 	private int $timeout     = 240;
 	private bool $is_deepseek = false;
 
+	public function set_timeout( int $seconds ): void {
+		$this->timeout = max( 10, $seconds );
+	}
+
 	public function __construct( AISEO_Settings $settings ) {
 		$this->api_key    = $settings->get_api_key();
 		$this->model      = $settings->get( 'openai_model' );

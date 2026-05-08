@@ -305,7 +305,7 @@ class AISEO_Readability {
 	private function split_sentences( string $text ): array {
 		$text      = preg_replace( '/\s+/', ' ', trim( $text ) );
 		$sentences = preg_split( '/(?<=[.!?…])\s+(?=[A-ZÇĞİŞÖÜa-zçğışöü])/u', $text, -1, PREG_SPLIT_NO_EMPTY );
-		return array_filter( $sentences ?: [], fn( $s ) => aiseo_count_words( $s ) > 2 );
+		return array_values( array_filter( $sentences ?: [], fn( $s ) => aiseo_count_words( $s ) > 2 ) );
 	}
 
 	private function split_paragraphs( string $html ): array {
