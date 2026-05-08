@@ -21,6 +21,7 @@ class AISEO_Auto_Publisher {
 	public function init(): void {
 		add_filter( 'cron_schedules', [ $this, 'register_schedules' ] );
 		add_action( self::CRON_HOOK, [ $this, 'run' ] );
+		add_action( 'init', [ $this, 'maybe_run_due_fallback' ], 20 );
 	}
 
 	public function register_schedules( array $schedules ): array {
@@ -71,7 +72,7 @@ class AISEO_Auto_Publisher {
 
 		update_option( self::OPTION_KEY, $new, false );
 
-		if ( $new['enabled'] !== $current['enabled'] || (float) $new['interval_hours'] !== (float) $current['interval_hours'] ) {
+		if ( $new['enabled'] !== $current['enabled'] || (float) $new['interval_hours'] !== (float) $current['interval_hours'] || ( $new['enabled'] && ! wp_next_scheduled( self::CRON_HOOK ) ) ) {
 			$this->reschedule( $new );
 		}
 	}
@@ -98,19 +99,52 @@ class AISEO_Auto_Publisher {
 		return $ts ? date_i18n( 'd.m.Y H:i', $ts ) : null;
 	}
 
+	public function maybe_run_due_fallback(): void {
+		if ( wp_doing_cron() ) {
+			return;
+		}
+
+		$settings = $this->get_settings();
+		if ( empty( $settings['enabled'] ) ) {
+			return;
+		}
+
+		$next_run = wp_next_scheduled( self::CRON_HOOK );
+		if ( ! $next_run ) {
+			$this->schedule( (float) $settings['interval_hours'] );
+			return;
+		}
+		if ( $next_run > time() || get_transient( self::PROCESSING_TRANSIENT ) ) {
+			return;
+		}
+
+		$this->unschedule();
+		$this->schedule( (float) $settings['interval_hours'] );
+		$this->run();
+	}
+
 	public function run(): void {
 		$settings = $this->get_settings();
 		if ( ! $settings['enabled'] ) {
 			return;
 		}
-
-		$post = $this->get_next_draft( $settings );
-		if ( ! $post ) {
-			$this->logger->log_ai_operation( 0, 'auto_publish_cron', 'system', 0, 0, 'success', 'Kuyrukta işlenecek taslak yok.' );
+		if ( get_transient( self::PROCESSING_TRANSIENT ) ) {
 			return;
 		}
 
-		$this->process_post( $post->ID, $settings );
+		set_transient( self::PROCESSING_TRANSIENT, -1, HOUR_IN_SECONDS );
+
+		try {
+			$post = $this->get_next_draft( $settings );
+			if ( ! $post ) {
+				$this->logger->log_ai_operation( 0, 'auto_publish_cron', 'system', 0, 0, 'success', 'Kuyrukta işlenecek taslak yok.' );
+				return;
+			}
+
+			$this->process_post( $post->ID, $settings );
+		} finally {
+			delete_transient( self::PROCESSING_TRANSIENT );
+		}
 	}
 
 	public function run_manual( int $post_id = 0 ): array {
