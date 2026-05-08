@@ -77,12 +77,12 @@
 			refreshBtn.addEventListener('click', async () => {
 				UI.loading(refreshBtn, true);
 				try {
-					const res = await API.getAutoPublisherQueue();
+					const res = await API.refreshAutoPublisherQueue();
 					const queue = res.data?.queue || [];
 					const total = parseInt(res.data?.total || queue.length || 0, 10);
 					renderQueue(queue);
 					updateQueueKpi(total);
-					UI.notice('aiseo-ap-notice', 'Kuyruk guncellendi.', 'success');
+					UI.notice('aiseo-ap-notice', res.message || 'Kuyruk sirasi guncellendi.', 'success');
 				} catch (e) {
 					UI.notice('aiseo-ap-notice', e.message || i18n.error, 'error');
 				} finally {
@@ -186,6 +186,7 @@
 		saveAutoPublisherSettings: (d) => API.request('/auto-publisher/settings', 'POST', d),
 		triggerAutoPublisher:  (postId) => API.request('/auto-publisher/trigger', 'POST', postId ? { post_id: postId } : null),
 		getAutoPublisherQueue: ()      => API.request('/auto-publisher/queue'),
+		refreshAutoPublisherQueue: ()  => API.request('/auto-publisher/queue/refresh', 'POST'),
 		skipAutoPublisherPost: (pid, skip) => API.request('/auto-publisher/skip/' + pid, 'POST', { skip: !!skip }),
 	};
 
@@ -2375,7 +2376,7 @@
 			refreshBtn.addEventListener('click', async () => {
 				UI.loading(refreshBtn, true);
 				try {
-					const res = await API.getAutoPublisherQueue();
+					const res = await API.refreshAutoPublisherQueue();
 					const queue = res.data?.queue || [];
 					const tbody = document.getElementById('aiseo-ap-queue-body');
 					const wrap  = document.getElementById('aiseo-ap-queue-wrap');

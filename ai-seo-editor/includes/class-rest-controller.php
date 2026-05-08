@@ -169,6 +169,12 @@ class AISEO_Rest_Controller {
 			'permission_callback' => [ $this, 'check_permissions' ],
 		] );
 
+		register_rest_route( self::NAMESPACE, '/auto-publisher/queue/refresh', [
+			'methods'             => WP_REST_Server::CREATABLE,
+			'callback'            => [ $this, 'refresh_auto_publisher_queue' ],
+			'permission_callback' => [ $this, 'check_permissions' ],
+		] );
+
 		register_rest_route( self::NAMESPACE, '/auto-publisher/skip/(?P<post_id>\d+)', [
 			'methods'             => WP_REST_Server::CREATABLE,
 			'callback'            => [ $this, 'skip_auto_publisher_post' ],
@@ -911,6 +917,19 @@ class AISEO_Rest_Controller {
 				'queue' => $ap->get_queue( $limit ),
 				'total' => $ap->count_queue(),
 			]
+		);
+	}
+
+	public function refresh_auto_publisher_queue( WP_REST_Request $request ): WP_REST_Response {
+		$ap    = new AISEO_Auto_Publisher( $this->settings, $this->logger );
+		$limit = max( 1, min( 50, absint( $request->get_param( 'limit' ) ?? 20 ) ) );
+
+		return $this->ok(
+			[
+				'queue' => $ap->refresh_queue_order( $limit ),
+				'total' => $ap->count_queue(),
+			],
+			__( 'Kuyruk sirasi guncellendi.', 'ai-seo-editor' )
 		);
 	}
 

@@ -7,6 +7,8 @@ class AISEO_Auto_Publisher {
 
 	private const OPTION_KEY = 'aiseo_auto_publisher_settings';
 	private const CRON_HOOK  = 'aiseo_auto_publish_cron';
+	private const QUEUE_ORDER_META = '_aiseo_auto_publish_queue_order';
+	private const PROCESSING_TRANSIENT = 'aiseo_auto_publish_processing_post';
 
 	private AISEO_Settings $settings;
 	private AISEO_Logger   $logger;
@@ -131,11 +133,14 @@ class AISEO_Auto_Publisher {
 		if ( empty( $posts ) ) {
 			return null;
 		}
+		if ( $this->has_queue_order( $posts ) ) {
+			return $posts[0];
+		}
 		$queue = $this->diversify_posts_by_category( $posts, 1, $this->get_last_published_category_ids() );
 		return ! empty( $queue ) ? $queue[0] : null;
 	}
 
-	private function get_draft_posts( array $settings, int $limit ): array {
+	private function get_draft_posts( array $settings, int $limit, bool $use_queue_order = true ): array {
 		$args = [
 			'post_type'      => 'post',
 			'post_status'    => 'draft',
@@ -154,7 +159,12 @@ class AISEO_Auto_Publisher {
 			$args['category__in'] = $settings['category_ids'];
 		}
 
-		return get_posts( $args );
+		$posts = get_posts( $args );
+		if ( $use_queue_order ) {
+			$this->sort_posts_by_queue_order( $posts );
+		}
+
+		return array_slice( $posts, 0, $limit );
 	}
 
 	public function process_post( int $post_id, ?array $settings = null ): array {
@@ -166,6 +176,8 @@ class AISEO_Auto_Publisher {
 		if ( ! $post instanceof WP_Post ) {
 			return [ 'success' => false, 'message' => 'Yazı bulunamadı.' ];
 		}
+
+		set_transient( self::PROCESSING_TRANSIENT, $post_id, HOUR_IN_SECONDS );
 
 		$attempts = (int) get_post_meta( $post_id, '_aiseo_auto_publish_attempt', true );
 		update_post_meta( $post_id, '_aiseo_auto_publish_attempt', $attempts + 1 );
@@ -269,6 +281,8 @@ class AISEO_Auto_Publisher {
 		} catch ( Throwable $e ) {
 			$this->logger->log_ai_operation( $post_id, 'auto_publish', (string) $this->settings->get( 'openai_model' ), 0, 0, 'error', $e->getMessage() );
 			return [ 'success' => false, 'message' => $e->getMessage() ];
+		} finally {
+			delete_transient( self::PROCESSING_TRANSIENT );
 		}
 	}
 
@@ -410,7 +424,9 @@ class AISEO_Auto_Publisher {
 		$settings = $this->get_settings();
 		$queue = [];
 		$posts = $this->get_draft_posts( $settings, max( $limit * 4, 50 ) );
-		$posts = $this->diversify_posts_by_category( $posts, $limit, $this->get_last_published_category_ids() );
+		$posts = $this->has_queue_order( $posts )
+			? array_slice( $posts, 0, $limit )
+			: $this->diversify_posts_by_category( $posts, $limit, $this->get_last_published_category_ids() );
 
 		foreach ( $posts as $post ) {
 			$categories = get_the_category( $post->ID );
@@ -427,6 +443,64 @@ class AISEO_Auto_Publisher {
 			];
 		}
 		return $queue;
+	}
+
+	public function refresh_queue_order( int $limit = 200 ): array {
+		$settings           = $this->get_settings();
+		$processing_post_id = absint( get_transient( self::PROCESSING_TRANSIENT ) );
+		$order_limit        = max( 200, $limit * 4 );
+		$posts              = $this->get_draft_posts( $settings, $order_limit, false );
+		$posts_to_sort      = [];
+
+		foreach ( $posts as $post ) {
+			if ( ! $post instanceof WP_Post ) {
+				continue;
+			}
+			if ( $processing_post_id > 0 && (int) $post->ID === $processing_post_id ) {
+				continue;
+			}
+			$posts_to_sort[] = $post;
+		}
+
+		$ordered = $this->diversify_posts_by_category( $posts_to_sort, count( $posts_to_sort ), $this->get_last_published_category_ids() );
+		$stamp   = time();
+		foreach ( $ordered as $index => $post ) {
+			update_post_meta( $post->ID, self::QUEUE_ORDER_META, $stamp + $index );
+		}
+
+		return $this->get_queue( min( 50, max( 1, $limit ) ) );
+	}
+
+	private function has_queue_order( array $posts ): bool {
+		foreach ( $posts as $post ) {
+			if ( $post instanceof WP_Post && metadata_exists( 'post', $post->ID, self::QUEUE_ORDER_META ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private function sort_posts_by_queue_order( array &$posts ): void {
+		usort( $posts, static function ( $a, $b ) {
+			$a_has_order = $a instanceof WP_Post && metadata_exists( 'post', $a->ID, self::QUEUE_ORDER_META );
+			$b_has_order = $b instanceof WP_Post && metadata_exists( 'post', $b->ID, self::QUEUE_ORDER_META );
+
+			if ( $a_has_order !== $b_has_order ) {
+				return $a_has_order ? -1 : 1;
+			}
+
+			if ( $a_has_order && $b_has_order ) {
+				$a_order = (int) get_post_meta( $a->ID, self::QUEUE_ORDER_META, true );
+				$b_order = (int) get_post_meta( $b->ID, self::QUEUE_ORDER_META, true );
+				if ( $a_order !== $b_order ) {
+					return $a_order <=> $b_order;
+				}
+			}
+
+			$a_date = $a instanceof WP_Post ? (string) $a->post_date : '';
+			$b_date = $b instanceof WP_Post ? (string) $b->post_date : '';
+			return strcmp( $a_date, $b_date );
+		} );
 	}
 
 	private function get_allowed_intervals(): array {
