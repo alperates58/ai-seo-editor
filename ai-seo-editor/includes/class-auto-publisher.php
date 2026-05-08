@@ -160,6 +160,7 @@ class AISEO_Auto_Publisher {
 		try {
 			$content = $post->post_content;
 			$title   = $post->post_title;
+			$draft_title = $title;
 			$original_content = (string) $content;
 
 			// Step 1: Generate content if post body is empty/short
@@ -168,7 +169,6 @@ class AISEO_Auto_Publisher {
 				if ( ! $gen['success'] ) {
 					return $gen;
 				}
-				$title   = $gen['title'];
 				$content = aiseo_preserve_bracket_blocks( $original_content, (string) $gen['content'] );
 
 				wp_update_post( [ 'ID' => $post_id, 'post_title' => $title, 'post_content' => $content ] );
@@ -198,7 +198,7 @@ class AISEO_Auto_Publisher {
 			if ( $settings['optimize_before_publish'] ) {
 				$opt = $this->optimize_post( $post_id, $settings, $content, $title );
 				if ( $opt['success'] ) {
-					$title   = $opt['title'];
+					$title   = $draft_title;
 					$content = aiseo_preserve_bracket_blocks( $original_content, (string) $opt['content'] );
 				}
 			}
@@ -319,7 +319,7 @@ class AISEO_Auto_Publisher {
 				return [ 'success' => false, 'message' => 'Optimizasyon içerik döndürmedi.' ];
 			}
 
-			$new_title   = aiseo_normalize_seo_title( (string) ( $result['title'] ?? $title ) );
+			$new_title   = $title;
 			$new_content = wp_kses_post( $result['content'] );
 			$new_meta    = sanitize_textarea_field( $result['meta_description'] ?? $meta );
 			$tokens      = (int) ( $result['tokens_used'] ?? 0 );
