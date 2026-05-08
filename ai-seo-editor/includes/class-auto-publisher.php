@@ -96,7 +96,7 @@ class AISEO_Auto_Publisher {
 
 	public function get_next_scheduled(): ?string {
 		$ts = wp_next_scheduled( self::CRON_HOOK );
-		return $ts ? date_i18n( 'd.m.Y H:i', $ts ) : null;
+		return $ts ? wp_date( 'd.m.Y H:i', $ts ) : null;
 	}
 
 	public function maybe_run_due_fallback(): void {
