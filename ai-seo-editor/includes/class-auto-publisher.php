@@ -112,15 +112,7 @@ class AISEO_Auto_Publisher {
 		$next_run = wp_next_scheduled( self::CRON_HOOK );
 		if ( ! $next_run ) {
 			$this->schedule( (float) $settings['interval_hours'] );
-			return;
 		}
-		if ( $next_run > time() || get_transient( self::PROCESSING_TRANSIENT ) ) {
-			return;
-		}
-
-		$this->unschedule();
-		$this->schedule( (float) $settings['interval_hours'] );
-		$this->run();
 	}
 
 	public function run(): void {
