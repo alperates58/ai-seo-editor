@@ -22,11 +22,11 @@ class AISEO_Auto_Publisher {
 	}
 
 	public function register_schedules( array $schedules ): array {
-		foreach ( [ 1, 2, 4, 6, 12, 24, 48, 72, 168 ] as $hours ) {
-			$key               = 'aiseo_every_' . $hours . 'h';
+		foreach ( $this->get_allowed_intervals() as $hours ) {
+			$key               = $this->get_schedule_key( $hours );
 			$schedules[ $key ] = [
-				'interval' => $hours * HOUR_IN_SECONDS,
-				'display'  => sprintf( 'Her %d saatte bir', $hours ),
+				'interval' => $this->get_interval_seconds( $hours ),
+				'display'  => 0.5 === (float) $hours ? 'Her 30 dakikada bir' : sprintf( 'Her %d saatte bir', $hours ),
 			];
 		}
 		return $schedules;
@@ -51,11 +51,11 @@ class AISEO_Auto_Publisher {
 
 	public function save_settings( array $data ): void {
 		$current = $this->get_settings();
+		$interval = (float) ( $data['interval_hours'] ?? 24 );
 
 		$new = [
 			'enabled'                => ! empty( $data['enabled'] ),
-			'interval_hours'         => in_array( (int) ( $data['interval_hours'] ?? 24 ), [ 1, 2, 4, 6, 12, 24, 48, 72, 168 ], true )
-									   ? (int) $data['interval_hours'] : 24,
+			'interval_hours'         => in_array( $interval, $this->get_allowed_intervals(), true ) ? $interval : 24,
 			'min_seo_score'          => max( 0, min( 100, (int) ( $data['min_seo_score'] ?? 70 ) ) ),
 			'min_readability_score'  => max( 0, min( 100, (int) ( $data['min_readability_score'] ?? 60 ) ) ),
 			'category_ids'           => array_map( 'absint', (array) ( $data['category_ids'] ?? [] ) ),
@@ -69,7 +69,7 @@ class AISEO_Auto_Publisher {
 
 		update_option( self::OPTION_KEY, $new, false );
 
-		if ( $new['enabled'] !== $current['enabled'] || $new['interval_hours'] !== $current['interval_hours'] ) {
+		if ( $new['enabled'] !== $current['enabled'] || (float) $new['interval_hours'] !== (float) $current['interval_hours'] ) {
 			$this->reschedule( $new );
 		}
 	}
@@ -77,13 +77,13 @@ class AISEO_Auto_Publisher {
 	private function reschedule( array $settings ): void {
 		$this->unschedule();
 		if ( $settings['enabled'] ) {
-			$this->schedule( $settings['interval_hours'] );
+			$this->schedule( (float) $settings['interval_hours'] );
 		}
 	}
 
-	private function schedule( int $hours ): void {
+	private function schedule( float $hours ): void {
 		if ( ! wp_next_scheduled( self::CRON_HOOK ) ) {
-			wp_schedule_event( time() + ( $hours * HOUR_IN_SECONDS ), 'aiseo_every_' . $hours . 'h', self::CRON_HOOK );
+			wp_schedule_event( time() + $this->get_interval_seconds( $hours ), $this->get_schedule_key( $hours ), self::CRON_HOOK );
 		}
 	}
 
@@ -111,20 +111,35 @@ class AISEO_Auto_Publisher {
 		$this->process_post( $post->ID, $settings );
 	}
 
-	public function run_manual(): array {
+	public function run_manual( int $post_id = 0 ): array {
 		$settings = $this->get_settings();
-		$post     = $this->get_next_draft( $settings );
+		$post     = $post_id > 0 ? get_post( $post_id ) : $this->get_next_draft( $settings );
 		if ( ! $post ) {
 			return [ 'success' => false, 'message' => 'Kuyrukta işlenecek taslak yok.' ];
+		}
+		if ( 'draft' !== $post->post_status || 'post' !== $post->post_type || get_post_meta( $post->ID, '_aiseo_auto_publish_skip', true ) ) {
+			return [ 'success' => false, 'message' => 'Seçilen yazı otomatik yayın kuyruğunda değil.' ];
+		}
+		if ( ! empty( $settings['category_ids'] ) && empty( array_intersect( array_map( 'intval', $settings['category_ids'] ), wp_get_post_categories( $post->ID ) ) ) ) {
+			return [ 'success' => false, 'message' => 'Seçilen yazı aktif kategori filtresinde değil.' ];
 		}
 		return $this->process_post( $post->ID, $settings );
 	}
 
 	private function get_next_draft( array $settings ): ?WP_Post {
+		$posts = $this->get_draft_posts( $settings, 50 );
+		if ( empty( $posts ) ) {
+			return null;
+		}
+		$queue = $this->diversify_posts_by_category( $posts, 1, $this->get_last_published_category_ids() );
+		return ! empty( $queue ) ? $queue[0] : null;
+	}
+
+	private function get_draft_posts( array $settings, int $limit ): array {
 		$args = [
 			'post_type'      => 'post',
 			'post_status'    => 'draft',
-			'posts_per_page' => 1,
+			'posts_per_page' => $limit,
 			'orderby'        => 'date',
 			'order'          => 'ASC',
 			'meta_query'     => [
@@ -139,8 +154,7 @@ class AISEO_Auto_Publisher {
 			$args['category__in'] = $settings['category_ids'];
 		}
 
-		$posts = get_posts( $args );
-		return ! empty( $posts ) ? $posts[0] : null;
+		return get_posts( $args );
 	}
 
 	public function process_post( int $post_id, ?array $settings = null ): array {
@@ -394,26 +408,11 @@ class AISEO_Auto_Publisher {
 
 	public function get_queue( int $limit = 10 ): array {
 		$settings = $this->get_settings();
-		$args     = [
-			'post_type'      => 'post',
-			'post_status'    => 'draft',
-			'posts_per_page' => $limit,
-			'orderby'        => 'date',
-			'order'          => 'ASC',
-			'meta_query'     => [
-				[
-					'key'     => '_aiseo_auto_publish_skip',
-					'compare' => 'NOT EXISTS',
-				],
-			],
-		];
-
-		if ( ! empty( $settings['category_ids'] ) ) {
-			$args['category__in'] = $settings['category_ids'];
-		}
-
 		$queue = [];
-		foreach ( get_posts( $args ) as $post ) {
+		$posts = $this->get_draft_posts( $settings, max( $limit * 4, 50 ) );
+		$posts = $this->diversify_posts_by_category( $posts, $limit, $this->get_last_published_category_ids() );
+
+		foreach ( $posts as $post ) {
 			$categories = get_the_category( $post->ID );
 			$queue[]    = [
 				'id'         => $post->ID,
@@ -428,6 +427,104 @@ class AISEO_Auto_Publisher {
 			];
 		}
 		return $queue;
+	}
+
+	private function get_allowed_intervals(): array {
+		return [ 0.5, 1.0, 2.0, 4.0, 6.0, 12.0, 24.0, 48.0, 72.0, 168.0 ];
+	}
+
+	private function get_interval_seconds( float $hours ): int {
+		return max( 1, (int) round( $hours * HOUR_IN_SECONDS ) );
+	}
+
+	private function get_schedule_key( float $hours ): string {
+		return 0.5 === $hours ? 'aiseo_every_30m' : 'aiseo_every_' . (int) $hours . 'h';
+	}
+
+	private function get_last_published_category_ids(): array {
+		$posts = get_posts( [
+			'post_type'      => 'post',
+			'post_status'    => 'publish',
+			'posts_per_page' => 1,
+			'orderby'        => 'meta_value',
+			'meta_key'       => '_aiseo_auto_published',
+			'order'          => 'DESC',
+			'fields'         => 'ids',
+			'meta_query'     => [ [ 'key' => '_aiseo_auto_published', 'compare' => 'EXISTS' ] ],
+		] );
+
+		return empty( $posts ) ? [] : wp_get_post_categories( (int) $posts[0] );
+	}
+
+	private function get_primary_category_id( int $post_id ): int {
+		$categories = wp_get_post_categories( $post_id );
+		if ( empty( $categories ) ) {
+			return 0;
+		}
+
+		usort( $categories, static function ( $a, $b ) {
+			$depth_a = count( get_ancestors( $a, 'category' ) );
+			$depth_b = count( get_ancestors( $b, 'category' ) );
+			return $depth_b <=> $depth_a;
+		} );
+
+		return (int) $categories[0];
+	}
+
+	private function diversify_posts_by_category( array $posts, int $limit, array $avoid_category_ids = [] ): array {
+		$buckets = [];
+		foreach ( $posts as $post ) {
+			if ( ! $post instanceof WP_Post ) {
+				continue;
+			}
+			$category_id = $this->get_primary_category_id( $post->ID );
+			$buckets[ $category_id ][] = $post;
+		}
+
+		foreach ( $buckets as $category_id => $bucket ) {
+			shuffle( $bucket );
+			$buckets[ $category_id ] = $bucket;
+		}
+
+		$result            = [];
+		$previous_category = 0;
+		$avoid_map         = array_fill_keys( array_map( 'intval', $avoid_category_ids ), true );
+
+		while ( count( $result ) < $limit && ! empty( $buckets ) ) {
+			$candidates = array_filter(
+				array_keys( $buckets ),
+				static fn( $category_id ) => (int) $category_id !== (int) $previous_category
+			);
+
+			if ( empty( $result ) && count( $buckets ) > 1 ) {
+				$non_recent = array_filter(
+					$candidates,
+					static fn( $category_id ) => empty( $avoid_map[ (int) $category_id ] )
+				);
+				if ( ! empty( $non_recent ) ) {
+					$candidates = $non_recent;
+				}
+			}
+
+			if ( empty( $candidates ) ) {
+				$candidates = array_keys( $buckets );
+			}
+
+			$max_remaining = max( array_map( static fn( $category_id ) => count( $buckets[ $category_id ] ), $candidates ) );
+			$candidates    = array_values( array_filter(
+				$candidates,
+				static fn( $category_id ) => count( $buckets[ $category_id ] ) === $max_remaining
+			) );
+			$category_id   = (int) $candidates[ wp_rand( 0, count( $candidates ) - 1 ) ];
+			$result[]      = array_shift( $buckets[ $category_id ] );
+			$previous_category = $category_id;
+
+			if ( empty( $buckets[ $category_id ] ) ) {
+				unset( $buckets[ $category_id ] );
+			}
+		}
+
+		return $result;
 	}
 
 	public function count_queue(): int {

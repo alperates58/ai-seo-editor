@@ -893,7 +893,8 @@ class AISEO_Rest_Controller {
 	public function trigger_auto_publisher( WP_REST_Request $request ): WP_REST_Response|WP_Error {
 		$this->check_token_budget();
 		$ap     = new AISEO_Auto_Publisher( $this->settings, $this->logger );
-		$result = $ap->run_manual();
+		$body   = (array) ( $request->get_json_params() ?: $request->get_body_params() );
+		$result = $ap->run_manual( absint( $body['post_id'] ?? 0 ) );
 
 		if ( ! $result['success'] ) {
 			return new WP_Error( 'aiseo_ap_error', $result['message'] ?? __( 'Otomatik yayın başarısız.', 'ai-seo-editor' ), [ 'status' => 500 ] );

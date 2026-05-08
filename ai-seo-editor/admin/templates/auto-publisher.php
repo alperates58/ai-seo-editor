@@ -11,6 +11,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /** @var string|null $next_run */
 
 $intervals = [
+	'0.5' => 'Her 30 dakikada bir',
 	1   => 'Her 1 saatte bir',
 	2   => 'Her 2 saatte bir',
 	4   => 'Her 4 saatte bir',
@@ -322,7 +323,7 @@ if ( empty( $activity_items ) ) {
 							<label for="aiseo-ap-interval"><?php esc_html_e( 'Yayin Araligi', 'ai-seo-editor' ); ?></label>
 							<select id="aiseo-ap-interval" class="regular-text">
 								<?php foreach ( $intervals as $val => $label ) : ?>
-									<option value="<?php echo esc_attr( $val ); ?>" <?php selected( $ap_settings['interval_hours'], $val ); ?>>
+									<option value="<?php echo esc_attr( $val ); ?>" <?php selected( (float) $ap_settings['interval_hours'], (float) $val ); ?>>
 										<?php echo esc_html( $label ); ?>
 									</option>
 								<?php endforeach; ?>
