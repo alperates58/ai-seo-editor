@@ -95,6 +95,9 @@ class AISEO_Optimizer {
 				] );
 
 			case 'meta':
+				if ( $meta_key === '_aiseo_meta_description' ) {
+					$new_value = aiseo_normalize_meta_description( $new_value );
+				}
 				update_post_meta( $post_id, sanitize_key( $meta_key ), sanitize_textarea_field( $new_value ) );
 				if ( $meta_key === '_aiseo_meta_description' ) {
 					$this->yoast->set_meta_description( $post_id, $new_value );

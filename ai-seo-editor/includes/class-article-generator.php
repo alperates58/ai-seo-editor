@@ -32,7 +32,7 @@ class AISEO_Article_Generator {
 			return [
 				'success'          => true,
 				'title'            => sanitize_text_field( $result['title'] ?? '' ),
-				'meta_description' => sanitize_textarea_field( $result['meta_description'] ?? '' ),
+				'meta_description' => aiseo_normalize_meta_description( (string) ( $result['meta_description'] ?? '' ) ),
 				'focus_keyword'    => sanitize_text_field( $result['focus_keyword'] ?? $params['keyword'] ?? '' ),
 				'content'          => $content_html,
 				'word_count'       => $word_count,
@@ -51,7 +51,7 @@ class AISEO_Article_Generator {
 		$content    = $this->clean_generated_html( $generation_result['content'] ?? '' );
 		$title      = sanitize_text_field( $generation_result['title'] ?? ( $params['title'] ?? __( 'Taslak Makale', 'ai-seo-editor' ) ) );
 		$keyword    = sanitize_text_field( $generation_result['focus_keyword'] ?? '' );
-		$meta_desc  = sanitize_textarea_field( $generation_result['meta_description'] ?? '' );
+		$meta_desc  = aiseo_normalize_meta_description( (string) ( $generation_result['meta_description'] ?? '' ) );
 		$category   = absint( $params['category'] ?? 0 );
 
 		$post_data = [

@@ -181,9 +181,10 @@ class AISEO_Auto_Publisher {
 					}
 				}
 				if ( ! empty( $gen['meta_description'] ) ) {
-					update_post_meta( $post_id, '_aiseo_meta_description', $gen['meta_description'] );
+					$gen_meta = aiseo_normalize_meta_description( (string) $gen['meta_description'] );
+					update_post_meta( $post_id, '_aiseo_meta_description', $gen_meta );
 					if ( $yoast->is_yoast_active() ) {
-						$yoast->set_meta_description( $post_id, $gen['meta_description'] );
+						$yoast->set_meta_description( $post_id, $gen_meta );
 					}
 				}
 				if ( ! empty( $gen['suggested_tags'] ) ) {
@@ -321,7 +322,7 @@ class AISEO_Auto_Publisher {
 
 			$new_title   = $title;
 			$new_content = wp_kses_post( $result['content'] );
-			$new_meta    = sanitize_textarea_field( $result['meta_description'] ?? $meta );
+			$new_meta    = aiseo_normalize_meta_description( (string) ( $result['meta_description'] ?? $meta ) );
 			$tokens      = (int) ( $result['tokens_used'] ?? 0 );
 
 			// Keyword Yoast'a kaydet (title'dan türetilmişse de mutlaka kaydet)

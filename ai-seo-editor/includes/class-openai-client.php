@@ -88,7 +88,7 @@ class AISEO_OpenAI_Client {
 		$messages = [
 			[
 				'role'    => 'system',
-				'content' => 'Sen bir SEO meta aciklama uzmanisin. 120-158 karakter arasinda, odak kelimeyi iceren, dogal ve tiklamaya tesvik eden bir meta aciklama yaz. YALNIZCA meta aciklamayi dondur.',
+				'content' => 'Sen bir SEO meta aciklama uzmanisin. 120-155 karakter arasinda, odak kelimeyi iceren, dogal ve tiklamaya tesvik eden bir meta aciklama yaz. 155 karakteri ASLA gecme. YALNIZCA meta aciklamayi dondur.',
 			],
 			[
 				'role'    => 'user',
@@ -99,7 +99,7 @@ class AISEO_OpenAI_Client {
 		$response = $this->chat_completion( $messages, 220, 0.6 );
 		return [
 			'before'   => $current,
-			'after'    => trim( $response['content'] ?? '' ),
+			'after'    => aiseo_normalize_meta_description( (string) ( $response['content'] ?? '' ) ),
 			'field'    => 'meta',
 			'meta_key' => '_aiseo_meta_description',
 		];
@@ -458,7 +458,7 @@ class AISEO_OpenAI_Client {
 				'role'    => 'system',
 				'content' => "Sen uzman bir SEO icerik yazarisisin. Verilen parametrelerle tam makale uret. JSON formatinda dondur:
 {\"title\":\"...\",\"meta_description\":\"...\",\"focus_keyword\":\"...\",\"content\":{\"introduction\":\"<p>...</p>\",\"sections\":[{\"heading\":\"H2 baslik\",\"content\":\"<p>...</p>\",\"subsections\":[{\"heading\":\"H3 baslik\",\"content\":\"<p>...</p>\"}]}],\"conclusion\":\"<p>...</p>\",\"faq\":[{\"question\":\"...\",\"answer\":\"...\"}]},\"word_count_estimate\":0,\"suggested_tags\":[]}
-Kurallar: Icerik {$lang_str} dilinde olacak, ton: {$tone}, yaklasik {$target_wc} kelime, Google EEAT prensiplerine uygun, dogal ve okuyucu odakli. suggested_tags alani 8-12 adet, 2-4 kelimelik, kisa olmayan SEO etiketi icermeli.{$faq_note}",
+Kurallar: Icerik {$lang_str} dilinde olacak, ton: {$tone}, yaklasik {$target_wc} kelime, Google EEAT prensiplerine uygun, dogal ve okuyucu odakli. meta_description 120-155 karakter arasinda olacak ve 155 karakteri ASLA gecmeyecek. suggested_tags alani 8-12 adet, 2-4 kelimelik, kisa olmayan SEO etiketi icermeli.{$faq_note}",
 			],
 			[
 				'role'    => 'user',

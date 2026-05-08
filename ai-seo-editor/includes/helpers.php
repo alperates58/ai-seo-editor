@@ -171,6 +171,39 @@ function aiseo_normalize_seo_title( string $title, int $max_length = 58 ): strin
 	return rtrim( $trimmed, " \t\n\r\0\x0B-:|,;/\\" );
 }
 
+function aiseo_normalize_meta_description( string $meta, int $max_length = 155 ): string {
+	$meta = sanitize_textarea_field( $meta );
+	$meta = trim( preg_replace( '/\s+/u', ' ', $meta ) ?? $meta );
+
+	if ( $meta === '' || mb_strlen( $meta ) <= $max_length ) {
+		return $meta;
+	}
+
+	$trimmed = trim( mb_substr( $meta, 0, $max_length + 1 ) );
+	$sentence_positions = array_filter(
+		[
+			mb_strrpos( $trimmed, '.' ),
+			mb_strrpos( $trimmed, '!' ),
+			mb_strrpos( $trimmed, '?' ),
+		],
+		static fn( $position ) => false !== $position
+	);
+	$last_sentence = ! empty( $sentence_positions ) ? max( $sentence_positions ) : false;
+
+	if ( false !== $last_sentence && $last_sentence >= 100 ) {
+		$trimmed = trim( mb_substr( $trimmed, 0, $last_sentence + 1 ) );
+	} else {
+		$last_space = mb_strrpos( $trimmed, ' ' );
+		if ( false !== $last_space && $last_space >= 100 ) {
+			$trimmed = trim( mb_substr( $trimmed, 0, $last_space ) );
+		} else {
+			$trimmed = trim( mb_substr( $trimmed, 0, $max_length ) );
+		}
+	}
+
+	return rtrim( $trimmed, " \t\n\r\0\x0B-:|,;/" );
+}
+
 function aiseo_preserve_bracket_blocks( string $source, string $target ): string {
 	if ( ! preg_match_all( '/\[[^\[\]\r\n]{1,800}\]/u', $source, $matches ) ) {
 		return $target;

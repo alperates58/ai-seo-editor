@@ -329,7 +329,7 @@ class AISEO_Rest_Controller {
 		}
 
 		$title   = aiseo_normalize_seo_title( (string) ( $result['title'] ?? $title_input ) );
-		$meta    = sanitize_textarea_field( $result['meta_description'] ?? $meta_input );
+		$meta    = aiseo_normalize_meta_description( (string) ( $result['meta_description'] ?? $meta_input ) );
 		$content = wp_kses_post( $result['content'] ?? $content_input );
 		$tags    = array_map( 'sanitize_text_field', is_array( $result['suggested_tags'] ?? null ) ? $result['suggested_tags'] : [] );
 		$tags    = $optimize_tags ? $this->filter_new_tags( $post_id, $tags, 3 ) : [];
@@ -682,7 +682,7 @@ class AISEO_Rest_Controller {
 		$content  = wp_kses_post( $request->get_param( 'content' ) ?? '' );
 		$title    = sanitize_text_field( $request->get_param( 'title' ) ?? '' );
 		$keyword  = sanitize_text_field( $request->get_param( 'focus_keyword' ) ?? '' );
-		$meta     = sanitize_textarea_field( $request->get_param( 'meta_description' ) ?? '' );
+		$meta     = aiseo_normalize_meta_description( (string) ( $request->get_param( 'meta_description' ) ?? '' ) );
 		$category = absint( $request->get_param( 'category' ) ?? 0 );
 		$tags     = array_map( 'sanitize_text_field', (array) ( $request->get_param( 'suggested_tags' ) ?? [] ) );
 		$auto_links = (bool) ( $request->get_param( 'auto_internal_links' ) ?? false );
@@ -1047,7 +1047,7 @@ class AISEO_Rest_Controller {
 		}
 
 		$title   = aiseo_normalize_seo_title( (string) ( $result['title'] ?? $title_before ) );
-		$meta    = sanitize_textarea_field( $result['meta_description'] ?? $meta_before );
+		$meta    = aiseo_normalize_meta_description( (string) ( $result['meta_description'] ?? $meta_before ) );
 		$content = wp_kses_post( $result['content'] ?? $content_before );
 		$tags    = array_map( 'sanitize_text_field', is_array( $result['suggested_tags'] ?? null ) ? $result['suggested_tags'] : [] );
 		$tags    = $this->filter_new_tags( $post_id, $tags, 3 );
