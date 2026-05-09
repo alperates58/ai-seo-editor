@@ -108,8 +108,8 @@ $base_url    = admin_url( 'admin.php?page=aiseo-seo-title-fix' );
 
 <script>
 (function () {
-	const restUrl  = window.AISeoConfig?.restUrl || '';
-	const nonce    = window.AISeoConfig?.nonce   || '';
+	const restUrl  = <?php echo wp_json_encode( esc_url_raw( rest_url() ) ); ?>;
+	const nonce    = <?php echo wp_json_encode( wp_create_nonce( 'wp_rest' ) ); ?>;
 
 	async function fixPost( postId ) {
 		const statusEl = document.getElementById( 'aiseo-stf-row-status-' + postId );
