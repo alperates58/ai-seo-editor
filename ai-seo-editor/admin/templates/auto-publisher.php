@@ -9,6 +9,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 /** @var int $total_queue_count */
 /** @var array $history */
 /** @var string|null $next_run */
+/** @var array $cron_status */
+/** @var array|null $next_queue_post */
 
 $intervals = [
 	'0.5' => 'Her 30 dakikada bir',
@@ -35,6 +37,12 @@ $read_pool             = [];
 $failed_count          = 0;
 $estimated_traffic     = 0;
 $activity_items        = [];
+$initial_cron_label    = ! empty( $cron_status['is_scheduled'] )
+	? __( 'Aktif', 'ai-seo-editor' )
+	: __( 'Cron kapali', 'ai-seo-editor' );
+$initial_next_post     = ! empty( $next_queue_post['id'] )
+	? sprintf( '#%d - %s', (int) $next_queue_post['id'], (string) $next_queue_post['title'] )
+	: __( 'Kuyrukta bekleyen yazi yok.', 'ai-seo-editor' );
 
 $build_badge_class = static function ( int $score ): string {
 	if ( $score >= 80 ) {
@@ -455,6 +463,44 @@ if ( empty( $activity_items ) ) {
 				<button type="button" id="aiseo-ap-trigger" class="button">
 					<?php esc_html_e( 'Simdi Calistir', 'ai-seo-editor' ); ?>
 				</button>
+			</div>
+		</section>
+
+		<section class="aiseo-card aiseo-ap-panel aiseo-ap-queue">
+			<div class="aiseo-ap-panel__header">
+				<div>
+					<h2><?php esc_html_e( 'Bakim / Kuyruk Yonetimi', 'ai-seo-editor' ); ?></h2>
+					<p><?php esc_html_e( 'Cron ve sira kayitlarini guvenli sekilde yonetin. Yazi icerikleri silinmez.', 'ai-seo-editor' ); ?></p>
+				</div>
+			</div>
+
+			<div class="aiseo-ap-highlight">
+				<div class="aiseo-ap-field-grid">
+					<div class="aiseo-ap-field">
+						<label><?php esc_html_e( 'Cron Durumu', 'ai-seo-editor' ); ?></label>
+						<p id="aiseo-ap-maintenance-cron-status"><?php echo esc_html( $initial_cron_label ); ?></p>
+					</div>
+					<div class="aiseo-ap-field">
+						<label><?php esc_html_e( 'Siradaki Calisma', 'ai-seo-editor' ); ?></label>
+						<p id="aiseo-ap-maintenance-next-run"><?php echo esc_html( $next_run ?: __( 'Planli cron yok.', 'ai-seo-editor' ) ); ?></p>
+					</div>
+					<div class="aiseo-ap-field">
+						<label><?php esc_html_e( 'Toplam Kuyruk', 'ai-seo-editor' ); ?></label>
+						<p id="aiseo-ap-maintenance-queue-count"><?php echo esc_html( (string) $total_queue_count ); ?></p>
+					</div>
+					<div class="aiseo-ap-field">
+						<label><?php esc_html_e( 'Siradaki Yazi', 'ai-seo-editor' ); ?></label>
+						<p id="aiseo-ap-maintenance-next-post"><?php echo esc_html( $initial_next_post ); ?></p>
+					</div>
+				</div>
+			</div>
+
+			<div class="aiseo-ap-actions">
+				<button type="button" id="aiseo-ap-stop-cron" class="button button-secondary"><?php esc_html_e( 'Cronu Durdur', 'ai-seo-editor' ); ?></button>
+				<button type="button" id="aiseo-ap-clear-queue-order" class="button button-secondary"><?php esc_html_e( 'Kuyrugu Temizle', 'ai-seo-editor' ); ?></button>
+				<button type="button" id="aiseo-ap-rebuild-queue" class="button button-secondary"><?php esc_html_e( 'Kuyrugu Yeniden Olustur', 'ai-seo-editor' ); ?></button>
+				<button type="button" id="aiseo-ap-check-cron-status" class="button button-secondary"><?php esc_html_e( 'Cron Durumunu Kontrol Et', 'ai-seo-editor' ); ?></button>
+				<button type="button" id="aiseo-ap-peek-next-post" class="button button-secondary"><?php esc_html_e( 'Siradaki Yaziyi Goster', 'ai-seo-editor' ); ?></button>
 			</div>
 		</section>
 

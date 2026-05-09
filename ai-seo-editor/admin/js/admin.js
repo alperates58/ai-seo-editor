@@ -14,6 +14,11 @@
 		const saveBtn = document.getElementById('aiseo-ap-save');
 		const triggerBtn = document.getElementById('aiseo-ap-trigger');
 		const refreshBtn = document.getElementById('aiseo-ap-refresh-queue');
+		const stopCronBtn = document.getElementById('aiseo-ap-stop-cron');
+		const clearQueueBtn = document.getElementById('aiseo-ap-clear-queue-order');
+		const rebuildQueueBtn = document.getElementById('aiseo-ap-rebuild-queue');
+		const checkCronBtn = document.getElementById('aiseo-ap-check-cron-status');
+		const peekNextBtn = document.getElementById('aiseo-ap-peek-next-post');
 		const enabledEl = document.getElementById('aiseo-ap-enabled');
 		const statusLbl = document.getElementById('aiseo-ap-status-label');
 		const categorySelect = document.getElementById('aiseo-ap-categories');
@@ -35,6 +40,10 @@
 		const drawerFaq = document.getElementById('aiseo-ap-drawer-faq');
 		const drawerLinks = document.getElementById('aiseo-ap-drawer-links');
 		const drawerEdit = document.getElementById('aiseo-ap-drawer-edit');
+		const maintenanceCronStatus = document.getElementById('aiseo-ap-maintenance-cron-status');
+		const maintenanceNextRun = document.getElementById('aiseo-ap-maintenance-next-run');
+		const maintenanceQueueCount = document.getElementById('aiseo-ap-maintenance-queue-count');
+		const maintenanceNextPost = document.getElementById('aiseo-ap-maintenance-next-post');
 		const counterEls = document.querySelectorAll('[data-counter-target]');
 
 		initTabs();
@@ -57,6 +66,7 @@
 					const data = res.data || {};
 					updateStatusLabel();
 					updateNextRunText(data.next_run);
+					updateMaintenancePanel(data);
 					UI.notice('aiseo-ap-notice', res.message || 'Ayarlar kaydedildi.', 'success');
 				} catch (e) {
 					UI.notice('aiseo-ap-notice', e.message || i18n.error, 'error');
@@ -82,6 +92,7 @@
 					const total = parseInt(res.data?.total || queue.length || 0, 10);
 					renderQueue(queue);
 					updateQueueKpi(total);
+					updateMaintenancePanel(res.data || {});
 					UI.notice('aiseo-ap-notice', res.message || 'Kuyruk sirasi guncellendi.', 'success');
 				} catch (e) {
 					UI.notice('aiseo-ap-notice', e.message || i18n.error, 'error');
@@ -91,9 +102,42 @@
 			});
 		}
 
+		if (stopCronBtn) {
+			stopCronBtn.addEventListener('click', async () => {
+				await runMaintenanceAction(stopCronBtn, 'stop_cron');
+			});
+		}
+
+		if (clearQueueBtn) {
+			clearQueueBtn.addEventListener('click', async () => {
+				if (!confirm('Sadece otomatik yayin sira kayitlari silinecek. Yazilar silinmeyecek. Devam edilsin mi?')) return;
+				await runMaintenanceAction(clearQueueBtn, 'clear_queue');
+			});
+		}
+
+		if (rebuildQueueBtn) {
+			rebuildQueueBtn.addEventListener('click', async () => {
+				await runMaintenanceAction(rebuildQueueBtn, 'rebuild_queue', { limit: 200 }, true);
+			});
+		}
+
+		if (checkCronBtn) {
+			checkCronBtn.addEventListener('click', async () => {
+				await runMaintenanceAction(checkCronBtn, 'cron_status');
+			});
+		}
+
+		if (peekNextBtn) {
+			peekNextBtn.addEventListener('click', async () => {
+				await runMaintenanceAction(peekNextBtn, 'peek_next');
+			});
+		}
+
 		function getFormData() { const categoryEls = document.querySelectorAll('#aiseo-ap-categories option:checked'); return { enabled: document.getElementById('aiseo-ap-enabled')?.checked || false, interval_hours: parseFloat(document.getElementById('aiseo-ap-interval')?.value) || 24, min_seo_score: parseInt(document.getElementById('aiseo-ap-min-seo')?.value, 10) || 70, min_readability_score: parseInt(document.getElementById('aiseo-ap-min-read')?.value, 10) || 60, category_ids: Array.from(categoryEls).map((o) => parseInt(o.value, 10)).filter(Boolean), internal_links_count: parseInt(document.getElementById('aiseo-ap-links')?.value, 10) || 3, target_words: parseInt(document.getElementById('aiseo-ap-words')?.value, 10) || 1000, tone: document.getElementById('aiseo-ap-tone')?.value || 'professional', include_faq: document.getElementById('aiseo-ap-faq')?.checked || false, auto_generate: document.getElementById('aiseo-ap-auto-generate')?.checked || false, optimize_before_publish: document.getElementById('aiseo-ap-optimize')?.checked || false }; }
 		function updateStatusLabel() { if (!enabledEl || !statusLbl) return; statusLbl.textContent = enabledEl.checked ? 'Aktif' : 'Pasif'; statusLbl.className = 'aiseo-ap-status-label ' + (enabledEl.checked ? 'active' : 'inactive'); }
 		function updateNextRunText(nextRun) { if (nextRunText) nextRunText.textContent = nextRun ? 'Sonraki calisma: ' + nextRun : 'Henuz zamanlanmamis.'; }
+		function updateMaintenancePanel(data) { const cronStatus = data.cron_status || {}; const nextRun = typeof cronStatus.next_run === 'string' && cronStatus.next_run ? cronStatus.next_run : (data.next_run || 'Planli cron yok.'); const queueTotal = Number.isFinite(parseInt(data.queue_total ?? data.total ?? 0, 10)) ? Math.max(0, parseInt(data.queue_total ?? data.total ?? 0, 10)) : 0; const nextPost = data.next_post || null; if (maintenanceCronStatus) maintenanceCronStatus.textContent = cronStatus.is_scheduled ? 'Aktif' : 'Cron kapali'; if (maintenanceNextRun) maintenanceNextRun.textContent = nextRun; if (maintenanceQueueCount) maintenanceQueueCount.textContent = String(queueTotal); if (maintenanceNextPost) maintenanceNextPost.textContent = nextPost && nextPost.id ? '#' + nextPost.id + ' - ' + (nextPost.title || 'Basliksiz taslak') : 'Kuyrukta bekleyen yazi yok.'; updateNextRunText(cronStatus.next_run || data.next_run || null); updateQueueKpi(queueTotal); }
+		async function runMaintenanceAction(buttonEl, action, extraBody, shouldRefreshQueue) { UI.loading(buttonEl, true); try { const res = await API.maintainAutoPublisher(Object.assign({ action: action }, extraBody || {})); const data = res.data || {}; updateMaintenancePanel(data); if (Array.isArray(data.queue)) renderQueue(data.queue); else if (shouldRefreshQueue) { const queueRes = await API.getAutoPublisherQueue(); renderQueue(queueRes.data?.queue || []); updateMaintenancePanel(queueRes.data || {}); } UI.notice('aiseo-ap-notice', res.message || 'Islem tamamlandi.', 'success'); } catch (e) { UI.notice('aiseo-ap-notice', e.message || i18n.error, 'error'); } finally { UI.loading(buttonEl, false); } }
 		function initTabs() { document.querySelectorAll('.aiseo-ap-tab').forEach((tab) => { tab.addEventListener('click', () => { const key = tab.dataset.apTab; document.querySelectorAll('.aiseo-ap-tab').forEach((item) => { const active = item === tab; item.classList.toggle('is-active', active); item.setAttribute('aria-selected', active ? 'true' : 'false'); }); document.querySelectorAll('.aiseo-ap-tab-panel').forEach((panel) => { const active = panel.dataset.apPanel === key; panel.classList.toggle('is-active', active); panel.hidden = !active; }); }); }); }
 		function initCategoryPicker() { if (!categorySelect || !categoryOptions || !categoryChips) return; categoryOptions.querySelectorAll('.aiseo-ap-category-option').forEach((btn) => { btn.addEventListener('click', () => toggleCategory(parseInt(btn.dataset.termId, 10))); }); if (categorySearch) { categorySearch.addEventListener('input', () => { const query = String(categorySearch.value || '').trim().toLowerCase(); categoryOptions.querySelectorAll('.aiseo-ap-category-option').forEach((btn) => { const name = String(btn.dataset.termName || '').toLowerCase(); btn.hidden = query ? !name.includes(query) : false; }); }); } if (clearCategoriesBtn) { clearCategoriesBtn.addEventListener('click', () => { Array.from(categorySelect.options).forEach((option) => { option.selected = false; }); renderCategorySelection(); }); } renderCategorySelection(); }
 		function toggleCategory(termId) { const option = Array.from(categorySelect.options).find((item) => parseInt(item.value, 10) === termId); if (!option) return; option.selected = !option.selected; renderCategorySelection(); }
@@ -187,6 +231,7 @@
 		triggerAutoPublisher:  (postId) => API.request('/auto-publisher/trigger', 'POST', postId ? { post_id: postId } : null),
 		getAutoPublisherQueue: ()      => API.request('/auto-publisher/queue'),
 		refreshAutoPublisherQueue: ()  => API.request('/auto-publisher/queue/refresh', 'POST'),
+		maintainAutoPublisher: (data)  => API.request('/auto-publisher/maintenance', 'POST', data || {}),
 		skipAutoPublisherPost: (pid, skip) => API.request('/auto-publisher/skip/' + pid, 'POST', { skip: !!skip }),
 	};
 

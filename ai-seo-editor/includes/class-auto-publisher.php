@@ -94,9 +94,28 @@ class AISEO_Auto_Publisher {
 		wp_clear_scheduled_hook( self::CRON_HOOK );
 	}
 
+	public function stop_cron(): int {
+		$result = wp_clear_scheduled_hook( self::CRON_HOOK );
+		if ( is_wp_error( $result ) || false === $result ) {
+			return 0;
+		}
+
+		return max( 0, (int) $result );
+	}
+
 	public function get_next_scheduled(): ?string {
 		$ts = wp_next_scheduled( self::CRON_HOOK );
 		return $ts ? wp_date( 'd.m.Y H:i', $ts ) : null;
+	}
+
+	public function get_cron_status(): array {
+		$timestamp = wp_next_scheduled( self::CRON_HOOK );
+
+		return [
+			'is_scheduled' => false !== $timestamp,
+			'timestamp'    => false !== $timestamp ? (int) $timestamp : null,
+			'next_run'     => false !== $timestamp ? wp_date( 'd.m.Y H:i', $timestamp ) : null,
+		];
 	}
 
 	public function maybe_run_due_fallback(): void {
@@ -539,6 +558,26 @@ class AISEO_Auto_Publisher {
 		}
 
 		return $this->get_queue( min( 50, max( 1, $limit ) ) );
+	}
+
+	public function clear_queue_order(): int {
+		global $wpdb;
+
+		if ( ! isset( $wpdb->postmeta ) ) {
+			return 0;
+		}
+
+		$result = $wpdb->delete(
+			$wpdb->postmeta,
+			[ 'meta_key' => self::QUEUE_ORDER_META ],
+			[ '%s' ]
+		);
+
+		if ( false === $result ) {
+			return 0;
+		}
+
+		return max( 0, (int) $result );
 	}
 
 	private function has_queue_order( array $posts ): bool {

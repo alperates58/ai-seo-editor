@@ -393,8 +393,10 @@ class AISEO_Admin {
 		$total_queue_count = $auto_publisher->count_queue();
 		$history        = $auto_publisher->get_history( 20 );
 		$next_run       = $auto_publisher->get_next_scheduled();
+		$cron_status    = $auto_publisher->get_cron_status();
+		$next_queue_post = $queue[0] ?? null;
 
-		$this->render_template( 'auto-publisher', compact( 'auto_publisher', 'ap_settings', 'categories', 'queue', 'total_queue_count', 'history', 'next_run' ) );
+		$this->render_template( 'auto-publisher', compact( 'auto_publisher', 'ap_settings', 'categories', 'queue', 'total_queue_count', 'history', 'next_run', 'cron_status', 'next_queue_post' ) );
 	}
 
 	public function page_seo_title_fix(): void {

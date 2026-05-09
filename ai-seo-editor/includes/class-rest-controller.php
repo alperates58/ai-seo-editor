@@ -175,6 +175,12 @@ class AISEO_Rest_Controller {
 			'permission_callback' => [ $this, 'check_permissions' ],
 		] );
 
+		register_rest_route( self::NAMESPACE, '/auto-publisher/maintenance', [
+			'methods'             => WP_REST_Server::CREATABLE,
+			'callback'            => [ $this, 'handle_auto_publisher_maintenance' ],
+			'permission_callback' => [ $this, 'check_permissions' ],
+		] );
+
 		register_rest_route( self::NAMESPACE, '/auto-publisher/skip/(?P<post_id>\d+)', [
 			'methods'             => WP_REST_Server::CREATABLE,
 			'callback'            => [ $this, 'skip_auto_publisher_post' ],
@@ -884,7 +890,17 @@ class AISEO_Rest_Controller {
 
 	public function get_auto_publisher_settings( WP_REST_Request $request ): WP_REST_Response {
 		$ap = new AISEO_Auto_Publisher( $this->settings, $this->logger );
-		return $this->ok( array_merge( $ap->get_settings(), [ 'next_run' => $ap->get_next_scheduled() ] ) );
+		return $this->ok(
+			array_merge(
+				$ap->get_settings(),
+				[
+					'next_run'    => $ap->get_next_scheduled(),
+					'cron_status' => $ap->get_cron_status(),
+					'queue_total' => $ap->count_queue(),
+					'next_post'   => $ap->get_queue( 1 )[0] ?? null,
+				]
+			)
+		);
 	}
 
 	public function save_auto_publisher_settings( WP_REST_Request $request ): WP_REST_Response|WP_Error {
@@ -897,7 +913,15 @@ class AISEO_Rest_Controller {
 		$ap->save_settings( $body );
 
 		return $this->ok(
-			array_merge( $ap->get_settings(), [ 'next_run' => $ap->get_next_scheduled() ] ),
+			array_merge(
+				$ap->get_settings(),
+				[
+					'next_run'    => $ap->get_next_scheduled(),
+					'cron_status' => $ap->get_cron_status(),
+					'queue_total' => $ap->count_queue(),
+					'next_post'   => $ap->get_queue( 1 )[0] ?? null,
+				]
+			),
 			__( 'Otomatik yayın ayarları kaydedildi.', 'ai-seo-editor' )
 		);
 	}
@@ -918,10 +942,13 @@ class AISEO_Rest_Controller {
 	public function get_auto_publisher_queue( WP_REST_Request $request ): WP_REST_Response {
 		$ap    = new AISEO_Auto_Publisher( $this->settings, $this->logger );
 		$limit = max( 1, min( 50, absint( $request->get_param( 'limit' ) ?? 20 ) ) );
+		$queue = $ap->get_queue( $limit );
 		return $this->ok(
 			[
-				'queue' => $ap->get_queue( $limit ),
-				'total' => $ap->count_queue(),
+				'queue'       => $queue,
+				'total'       => $ap->count_queue(),
+				'cron_status' => $ap->get_cron_status(),
+				'next_post'   => $queue[0] ?? null,
 			]
 		);
 	}
@@ -929,14 +956,73 @@ class AISEO_Rest_Controller {
 	public function refresh_auto_publisher_queue( WP_REST_Request $request ): WP_REST_Response {
 		$ap    = new AISEO_Auto_Publisher( $this->settings, $this->logger );
 		$limit = max( 1, min( 50, absint( $request->get_param( 'limit' ) ?? 20 ) ) );
+		$queue = $ap->refresh_queue_order( $limit );
 
 		return $this->ok(
 			[
-				'queue' => $ap->refresh_queue_order( $limit ),
-				'total' => $ap->count_queue(),
+				'queue'       => $queue,
+				'total'       => $ap->count_queue(),
+				'cron_status' => $ap->get_cron_status(),
+				'next_post'   => $queue[0] ?? null,
 			],
 			__( 'Kuyruk sirasi guncellendi.', 'ai-seo-editor' )
 		);
+	}
+
+	public function handle_auto_publisher_maintenance( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+		$body   = (array) ( $request->get_json_params() ?: $request->get_body_params() );
+		$action = sanitize_key( $body['action'] ?? '' );
+		$ap     = new AISEO_Auto_Publisher( $this->settings, $this->logger );
+
+		if ( '' === $action ) {
+			return new WP_Error( 'aiseo_missing_param', __( 'Bakim islemi belirtilmedi.', 'ai-seo-editor' ), [ 'status' => 422 ] );
+		}
+
+		$data    = [];
+		$message = '';
+
+		switch ( $action ) {
+			case 'stop_cron':
+				$data['cleared_events'] = $ap->stop_cron();
+				$message = sprintf( __( 'Cron durduruldu. Temizlenen event sayisi: %d', 'ai-seo-editor' ), $data['cleared_events'] );
+				break;
+
+			case 'clear_queue':
+				$data['deleted_rows'] = $ap->clear_queue_order();
+				$message = sprintf( __( 'Kuyruk sira kayitlari temizlendi. Silinen kayit sayisi: %d', 'ai-seo-editor' ), $data['deleted_rows'] );
+				break;
+
+			case 'rebuild_queue':
+				$limit = max( 1, min( 200, absint( $body['limit'] ?? 200 ) ) );
+				$data['queue']         = $ap->refresh_queue_order( $limit );
+				$data['rebuilt_limit'] = $limit;
+				$message = sprintf( __( 'Kuyruk yeniden olusturuldu. Toplam kuyruk: %d', 'ai-seo-editor' ), $ap->count_queue() );
+				break;
+
+			case 'cron_status':
+				$message = $ap->get_next_scheduled()
+					? __( 'Cron durumu guncellendi.', 'ai-seo-editor' )
+					: __( 'Cron kapali.', 'ai-seo-editor' );
+				break;
+
+			case 'peek_next':
+				$data['next_post'] = $ap->get_queue( 1 )[0] ?? null;
+				$message = ! empty( $data['next_post'] )
+					? __( 'Siradaki yazi bulundu.', 'ai-seo-editor' )
+					: __( 'Kuyrukta bekleyen yazi yok.', 'ai-seo-editor' );
+				break;
+
+			default:
+				return new WP_Error( 'aiseo_invalid_action', __( 'Gecersiz bakim islemi.', 'ai-seo-editor' ), [ 'status' => 422 ] );
+		}
+
+		$data['queue_total'] = $ap->count_queue();
+		$data['cron_status'] = $ap->get_cron_status();
+		if ( ! array_key_exists( 'next_post', $data ) ) {
+			$data['next_post'] = $ap->get_queue( 1 )[0] ?? null;
+		}
+
+		return $this->ok( $data, $message );
 	}
 
 	public function skip_auto_publisher_post( WP_REST_Request $request ): WP_REST_Response|WP_Error {
