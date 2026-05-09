@@ -399,7 +399,22 @@ class AISEO_Auto_Publisher {
 			$tokens      = (int) ( $result['tokens_used'] ?? 0 );
 
 			// AI tarafından üretilen SEO başlığını Yoast'a kaydet (post_title değişmez)
-			$ai_seo_title = aiseo_normalize_seo_title( (string) ( $result['title'] ?? $title ) );
+			// Fallback zinciri: birden fazla alanı dene, post_title ile aynıysa geç
+			$seo_title_candidates = [
+				$result['seo_title'] ?? '',
+				$result['seoTitle'] ?? '',
+				$result['optimized_title'] ?? '',
+				$result['meta_title'] ?? '',
+				$result['title'] ?? '',
+			];
+			$ai_seo_title = '';
+			foreach ( $seo_title_candidates as $candidate ) {
+				$candidate = aiseo_normalize_seo_title( (string) $candidate );
+				if ( $candidate !== '' && $candidate !== $title ) {
+					$ai_seo_title = $candidate;
+					break;
+				}
+			}
 			if ( $ai_seo_title !== '' ) {
 				update_post_meta( $post_id, '_aiseo_seo_title', $ai_seo_title );
 				if ( $yoast->is_yoast_active() ) {
