@@ -180,6 +180,12 @@ class AISEO_Rest_Controller {
 			'callback'            => [ $this, 'skip_auto_publisher_post' ],
 			'permission_callback' => [ $this, 'check_permissions' ],
 		] );
+
+		register_rest_route( self::NAMESPACE, '/seo-title/fix/(?P<post_id>\d+)', [
+			'methods'             => WP_REST_Server::CREATABLE,
+			'callback'            => [ $this, 'fix_seo_title' ],
+			'permission_callback' => [ $this, 'check_permissions' ],
+		] );
 	}
 
 	public function check_permissions( ?WP_REST_Request $request = null ): bool|WP_Error {
@@ -1186,6 +1192,86 @@ class AISEO_Rest_Controller {
 		}
 
 		return $clean;
+	}
+
+	public function fix_seo_title( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+		$post_id = absint( $request->get_param( 'post_id' ) );
+		if ( ! $this->post_exists( $post_id ) ) {
+			return $this->not_found();
+		}
+
+		$this->check_token_budget();
+
+		$post    = get_post( $post_id );
+		$yoast   = new AISEO_Yoast_Integration();
+		$keyword = $yoast->get_focus_keyword( $post_id );
+		$title   = $post instanceof WP_Post ? $post->post_title : '';
+
+		if ( empty( $keyword ) ) {
+			$keyword = $title;
+		}
+
+		if ( empty( $keyword ) ) {
+			return new WP_Error( 'aiseo_missing_param', __( 'Anahtar kelime veya başlık bulunamadı.', 'ai-seo-editor' ), [ 'status' => 422 ] );
+		}
+
+		try {
+			$client = new AISEO_OpenAI_Client( $this->settings );
+			$result = $client->optimize_full_post(
+				$post_id,
+				$keyword,
+				(string) $this->settings->get( 'default_tone' ),
+				$post instanceof WP_Post ? $post->post_content : '',
+				$title,
+				$yoast->get_meta_description( $post_id ),
+				wp_get_post_tags( $post_id, [ 'fields' => 'names' ] )
+			);
+		} catch ( Throwable $e ) {
+			return new WP_Error( 'aiseo_optimize_error', $e->getMessage(), [ 'status' => 500 ] );
+		}
+
+		$seo_title_candidates = [
+			$result['seo_title'] ?? '',
+			$result['seoTitle'] ?? '',
+			$result['optimized_title'] ?? '',
+			$result['meta_title'] ?? '',
+			$result['title'] ?? '',
+		];
+
+		$ai_seo_title = '';
+		foreach ( $seo_title_candidates as $candidate ) {
+			$candidate = aiseo_normalize_seo_title( (string) $candidate );
+			if ( $candidate !== '' && $candidate !== $title ) {
+				$ai_seo_title = $candidate;
+				break;
+			}
+		}
+
+		if ( $ai_seo_title === '' ) {
+			return new WP_REST_Response( [
+				'success'   => false,
+				'message'   => __( 'AI mevcut başlıktan farklı bir SEO başlığı üretemedi.', 'ai-seo-editor' ),
+				'post_id'   => $post_id,
+				'seo_title' => '',
+			], 200 );
+		}
+
+		update_post_meta( $post_id, '_aiseo_seo_title', $ai_seo_title );
+		if ( $yoast->is_yoast_active() ) {
+			$yoast->set_seo_title( $post_id, $ai_seo_title );
+		}
+
+		$this->logger->log_ai_operation(
+			$post_id, 'fix_seo_title',
+			(string) $this->settings->get( 'openai_model' ),
+			0, (int) ( $result['tokens_used'] ?? 0 ), 'success'
+		);
+
+		return new WP_REST_Response( [
+			'success'   => true,
+			'post_id'   => $post_id,
+			'seo_title' => $ai_seo_title,
+		], 200 );
 	}
 
 	private function clean_tag_list( array $tags, int $limit = 8 ): array {

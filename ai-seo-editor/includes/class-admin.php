@@ -101,6 +101,15 @@ class AISEO_Admin {
 
 		add_submenu_page(
 			$this->menu_slug,
+			__( 'SEO Başlık Düzelt', 'ai-seo-editor' ),
+			__( 'SEO Başlık Düzelt', 'ai-seo-editor' ),
+			'manage_options',
+			'aiseo-seo-title-fix',
+			[ $this, 'page_seo_title_fix' ]
+		);
+
+		add_submenu_page(
+			$this->menu_slug,
 			__( 'Ayarlar', 'ai-seo-editor' ),
 			__( 'Ayarlar', 'ai-seo-editor' ),
 			'manage_options',
@@ -385,6 +394,49 @@ class AISEO_Admin {
 		$next_run       = $auto_publisher->get_next_scheduled();
 
 		$this->render_template( 'auto-publisher', compact( 'auto_publisher', 'ap_settings', 'categories', 'queue', 'total_queue_count', 'history', 'next_run' ) );
+	}
+
+	public function page_seo_title_fix(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Yetkiniz yok.', 'ai-seo-editor' ) );
+		}
+
+		$paged    = max( 1, absint( $_GET['paged'] ?? 1 ) );
+		$per_page = 50;
+		$search   = sanitize_text_field( $_GET['s'] ?? '' );
+		$filter   = sanitize_key( $_GET['filter'] ?? '' );
+
+		$args = [
+			'post_type'      => 'post',
+			'post_status'    => 'publish',
+			'posts_per_page' => $per_page,
+			'paged'          => $paged,
+			'orderby'        => 'date',
+			'order'          => 'DESC',
+		];
+		if ( $search ) {
+			$args['s'] = $search;
+		}
+
+		$query = new WP_Query( $args );
+		$posts = $query->posts;
+
+		// Filtre: sadece SEO title'ı post_title ile aynı olanları göster
+		if ( $filter === 'missing' ) {
+			$posts = array_values( array_filter( $posts, function ( $post ) {
+				$seo_title = get_post_meta( $post->ID, '_yoast_wpseo_title', true );
+				return empty( $seo_title ) || $seo_title === $post->post_title;
+			} ) );
+		}
+
+		$this->render_template( 'seo-title-fix', [
+			'posts'    => $posts,
+			'total'    => $query->found_posts,
+			'paged'    => $paged,
+			'per_page' => $per_page,
+			'search'   => $search,
+			'filter'   => $filter,
+		] );
 	}
 
 	public function page_settings(): void {
