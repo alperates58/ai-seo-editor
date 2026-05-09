@@ -434,6 +434,12 @@ class AISEO_Auto_Publisher {
 					break;
 				}
 			}
+			if ( $ai_seo_title === '' ) {
+				$ai_seo_title = $client->generate_seo_title( $post_id, $keyword, $new_content, $title );
+				if ( $ai_seo_title === $title ) {
+					$ai_seo_title = '';
+				}
+			}
 			if ( $ai_seo_title !== '' ) {
 				update_post_meta( $post_id, '_aiseo_seo_title', $ai_seo_title );
 				if ( $yoast->is_yoast_active() ) {

@@ -83,6 +83,52 @@ class AISEO_OpenAI_Client {
 		];
 	}
 
+	public function generate_seo_title( int $post_id, string $keyword, string $content = '', string $title_override = '' ): string {
+		$post = get_post( $post_id );
+		if ( ! $post instanceof WP_Post ) {
+			return '';
+		}
+
+		$title = $title_override !== '' ? $title_override : get_the_title( $post_id );
+		$body  = $content !== '' ? $content : (string) $post->post_content;
+		$plain = aiseo_strip_html( apply_filters( 'the_content', $body ) );
+
+		$messages = [
+			[
+				'role'    => 'system',
+				'content' => 'Sen Turkce SEO baslik uzmanisin. 45-60 karakter hedefiyle, odak kelimeyi dogal bicimde iceren, clickbait olmayan, net bir SEO title uret. Post titlei aynen tekrar etme. Cevapta yalnizca baslik metni veya {"seo_title":"..."} dondur.',
+			],
+			[
+				'role'    => 'user',
+				'content' => "Odak kelime: {$keyword}\nMevcut post title: {$title}\nIcerik ozeti: " . aiseo_truncate( $plain, 1200 ),
+			],
+		];
+
+		try {
+			$response = $this->chat_completion( $messages, 120, 0.4 );
+		} catch ( Throwable $e ) {
+			return '';
+		}
+
+		$content = trim( (string) ( $response['content'] ?? '' ) );
+		if ( $content === '' ) {
+			return '';
+		}
+
+		$parsed = $this->parse_json_response( $content );
+		$title_candidate = '';
+
+		if ( isset( $parsed['seo_title'] ) ) {
+			$title_candidate = (string) $parsed['seo_title'];
+		} elseif ( isset( $parsed['title'] ) ) {
+			$title_candidate = (string) $parsed['title'];
+		} else {
+			$title_candidate = $content;
+		}
+
+		return aiseo_normalize_seo_title( trim( $title_candidate ) );
+	}
+
 	public function optimize_meta( int $post_id, string $keyword ): array {
 		$yoast   = new AISEO_Yoast_Integration();
 		$current = $yoast->get_meta_description( $post_id );
@@ -637,7 +683,6 @@ Kurallar: Icerik {$lang_str} dilinde olacak, ton: {$tone}, yaklasik {$target_wc}
 
 		if ( $article_content !== '' ) {
 			$parsed['content'] = $article_content;
-			$parsed['title'] = $parsed['title'] ?? $current['title'];
 			$parsed['meta_description'] = $parsed['meta_description'] ?? $current['meta_description'];
 			$parsed['suggested_tags'] = $parsed['suggested_tags'] ?? [];
 		}
@@ -647,7 +692,6 @@ Kurallar: Icerik {$lang_str} dilinde olacak, ton: {$tone}, yaklasik {$target_wc}
 			if ( $fallback_content !== '' ) {
 				$parsed = array_merge(
 					[
-						'title'            => $current['title'],
 						'meta_description' => $current['meta_description'],
 						'suggested_tags'    => [],
 					],
@@ -674,7 +718,9 @@ Kurallar: Icerik {$lang_str} dilinde olacak, ton: {$tone}, yaklasik {$target_wc}
 			}
 		}
 
-		$parsed['title'] = aiseo_normalize_seo_title( (string) ( $parsed['title'] ?? $current['title'] ) );
+		if ( isset( $parsed['title'] ) ) {
+			$parsed['title'] = aiseo_normalize_seo_title( (string) $parsed['title'] );
+		}
 
 		return $parsed;
 	}
