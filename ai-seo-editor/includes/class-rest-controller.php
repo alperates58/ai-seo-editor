@@ -949,6 +949,7 @@ class AISEO_Rest_Controller {
 				'total'       => $ap->count_queue(),
 				'cron_status' => $ap->get_cron_status(),
 				'next_post'   => $queue[0] ?? null,
+				'stats'       => $this->compute_ap_stats( $queue, $ap->get_history( 50 ) ),
 			]
 		);
 	}
@@ -964,6 +965,7 @@ class AISEO_Rest_Controller {
 				'total'       => $ap->count_queue(),
 				'cron_status' => $ap->get_cron_status(),
 				'next_post'   => $queue[0] ?? null,
+				'stats'       => $this->compute_ap_stats( $queue, $ap->get_history( 50 ) ),
 			],
 			__( 'Kuyruk sirasi guncellendi.', 'ai-seo-editor' )
 		);
@@ -1023,6 +1025,44 @@ class AISEO_Rest_Controller {
 		}
 
 		return $this->ok( $data, $message );
+	}
+
+	private function compute_ap_stats( array $queue, array $history ): array {
+		$today             = current_time( 'Y-m-d' );
+		$published_today   = 0;
+		$failed_count      = 0;
+		$estimated_traffic = 0;
+		$score_pool        = [];
+		$read_pool         = [];
+
+		$calc_traffic = static function ( int $seo, int $read ): int {
+			if ( $seo <= 0 && $read <= 0 ) return 0;
+			return max( 15, (int) round( $seo * 0.9 + $read * 0.55 ) );
+		};
+
+		foreach ( $queue as $item ) {
+			if ( ! empty( $item['score_fail'] ) ) $failed_count++;
+			if ( ! empty( $item['seo_score'] ) ) $score_pool[] = (int) $item['seo_score'];
+			if ( ! empty( $item['read_score'] ) ) $read_pool[] = (int) $item['read_score'];
+			$estimated_traffic += $calc_traffic( (int) ( $item['seo_score'] ?? 0 ), (int) ( $item['read_score'] ?? 0 ) );
+		}
+
+		foreach ( $history as $item ) {
+			if ( ! empty( $item['published_at'] ) && gmdate( 'Y-m-d', strtotime( $item['published_at'] ) ) === $today ) {
+				$published_today++;
+			}
+			if ( ! empty( $item['seo_score'] ) ) $score_pool[] = (int) $item['seo_score'];
+			if ( ! empty( $item['read_score'] ) ) $read_pool[] = (int) $item['read_score'];
+			$estimated_traffic += $calc_traffic( (int) ( $item['seo_score'] ?? 0 ), (int) ( $item['read_score'] ?? 0 ) );
+		}
+
+		return [
+			'published_today'   => $published_today,
+			'failed_count'      => $failed_count,
+			'avg_seo'           => ! empty( $score_pool ) ? (int) round( array_sum( $score_pool ) / count( $score_pool ) ) : 0,
+			'avg_readability'   => ! empty( $read_pool )  ? (int) round( array_sum( $read_pool )  / count( $read_pool )  ) : 0,
+			'estimated_traffic' => $estimated_traffic,
+		];
 	}
 
 	public function skip_auto_publisher_post( WP_REST_Request $request ): WP_REST_Response|WP_Error {

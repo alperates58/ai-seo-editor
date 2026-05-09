@@ -176,6 +176,7 @@ $average_readability = ! empty( $read_pool ) ? (int) round( array_sum( $read_poo
 
 $kpi_cards = [
 	[
+		'slug'     => 'queue-count',
 		'label'    => 'Bekleyen Taslak',
 		'value'    => $total_queue_count,
 		'accent'   => 'violet',
@@ -183,6 +184,7 @@ $kpi_cards = [
 		'icon'     => 'dashicons-edit-page',
 	],
 	[
+		'slug'     => 'published-today',
 		'label'    => 'Bugun Yayinlanan',
 		'value'    => $published_today,
 		'accent'   => 'blue',
@@ -190,6 +192,7 @@ $kpi_cards = [
 		'icon'     => 'dashicons-yes-alt',
 	],
 	[
+		'slug'     => 'avg-seo',
 		'label'    => 'Ortalama SEO',
 		'value'    => $average_seo ? $average_seo . '/100' : '--',
 		'accent'   => 'emerald',
@@ -197,6 +200,7 @@ $kpi_cards = [
 		'icon'     => 'dashicons-chart-line',
 	],
 	[
+		'slug'     => 'avg-read',
 		'label'    => 'Ortalama Okunabilirlik',
 		'value'    => $average_readability ? $average_readability . '/100' : '--',
 		'accent'   => 'amber',
@@ -204,6 +208,7 @@ $kpi_cards = [
 		'icon'     => 'dashicons-welcome-write-blog',
 	],
 	[
+		'slug'     => 'failed',
 		'label'    => 'Basarisiz Islem',
 		'value'    => $failed_count,
 		'accent'   => 'rose',
@@ -211,6 +216,7 @@ $kpi_cards = [
 		'icon'     => 'dashicons-warning',
 	],
 	[
+		'slug'     => 'traffic',
 		'label'    => 'Tahmini Trafik',
 		'value'    => $estimated_traffic > 0 ? '~' . number_format_i18n( $estimated_traffic ) : '--',
 		'accent'   => 'sky',
@@ -284,10 +290,10 @@ if ( empty( $activity_items ) ) {
 				</div>
 				<div class="aiseo-ap-kpi__body">
 					<div class="aiseo-ap-kpi__label"><?php echo esc_html( $card['label'] ); ?></div>
-					<div class="aiseo-ap-kpi__value<?php echo 'Bekleyen Taslak' === $card['label'] ? ' aiseo-ap-kpi__value--queue-count' : ''; ?>" data-counter-target="<?php echo esc_attr( is_numeric( $card['value'] ) ? (string) $card['value'] : preg_replace( '/[^0-9]/', '', (string) $card['value'] ) ); ?>">
+					<div class="aiseo-ap-kpi__value aiseo-ap-kpi__value--queue-count" data-kpi="<?php echo esc_attr( $card['slug'] ); ?>" data-counter-target="<?php echo esc_attr( is_numeric( $card['value'] ) ? (string) $card['value'] : preg_replace( '/[^0-9]/', '', (string) $card['value'] ) ); ?>">
 						<?php echo esc_html( (string) $card['value'] ); ?>
 					</div>
-					<div class="aiseo-ap-kpi__mini"><?php echo esc_html( $card['mini'] ); ?></div>
+					<div class="aiseo-ap-kpi__mini" data-kpi-mini="<?php echo esc_attr( $card['slug'] ); ?>"><?php echo esc_html( $card['mini'] ); ?></div>
 				</div>
 			</div>
 		<?php endforeach; ?>
