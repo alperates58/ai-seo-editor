@@ -1217,40 +1217,17 @@ class AISEO_Rest_Controller {
 
 		try {
 			$client = new AISEO_OpenAI_Client( $this->settings );
-			$result = $client->optimize_full_post(
-				$post_id,
-				$keyword,
-				(string) $this->settings->get( 'default_tone' ),
-				$post instanceof WP_Post ? $post->post_content : '',
-				$title,
-				$yoast->get_meta_description( $post_id ),
-				wp_get_post_tags( $post_id, [ 'fields' => 'names' ] )
-			);
+			$result = $client->optimize_title( $post_id, $keyword );
 		} catch ( Throwable $e ) {
 			return new WP_Error( 'aiseo_optimize_error', $e->getMessage(), [ 'status' => 500 ] );
 		}
 
-		$seo_title_candidates = [
-			$result['seo_title'] ?? '',
-			$result['seoTitle'] ?? '',
-			$result['optimized_title'] ?? '',
-			$result['meta_title'] ?? '',
-			$result['title'] ?? '',
-		];
-
-		$ai_seo_title = '';
-		foreach ( $seo_title_candidates as $candidate ) {
-			$candidate = aiseo_normalize_seo_title( (string) $candidate );
-			if ( $candidate !== '' && $candidate !== $title ) {
-				$ai_seo_title = $candidate;
-				break;
-			}
-		}
+		$ai_seo_title = aiseo_normalize_seo_title( (string) ( $result['after'] ?? '' ) );
 
 		if ( $ai_seo_title === '' ) {
 			return new WP_REST_Response( [
 				'success'   => false,
-				'message'   => __( 'AI mevcut başlıktan farklı bir SEO başlığı üretemedi.', 'ai-seo-editor' ),
+				'message'   => __( 'AI bir SEO başlığı üretemedi.', 'ai-seo-editor' ),
 				'post_id'   => $post_id,
 				'seo_title' => '',
 			], 200 );
