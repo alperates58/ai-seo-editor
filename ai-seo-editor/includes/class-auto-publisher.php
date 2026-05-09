@@ -398,6 +398,15 @@ class AISEO_Auto_Publisher {
 			$new_meta    = aiseo_normalize_meta_description( (string) ( $result['meta_description'] ?? $meta ) );
 			$tokens      = (int) ( $result['tokens_used'] ?? 0 );
 
+			// AI tarafından üretilen SEO başlığını Yoast'a kaydet (post_title değişmez)
+			$ai_seo_title = aiseo_normalize_seo_title( (string) ( $result['title'] ?? $title ) );
+			if ( $ai_seo_title !== '' ) {
+				update_post_meta( $post_id, '_aiseo_seo_title', $ai_seo_title );
+				if ( $yoast->is_yoast_active() ) {
+					$yoast->set_seo_title( $post_id, $ai_seo_title );
+				}
+			}
+
 			// Keyword Yoast'a kaydet (title'dan türetilmişse de mutlaka kaydet)
 			if ( $keyword_from_title || ! $yoast->get_focus_keyword( $post_id ) ) {
 				update_post_meta( $post_id, '_aiseo_focus_keyword', $keyword );
