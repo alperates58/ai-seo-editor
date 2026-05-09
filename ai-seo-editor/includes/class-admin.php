@@ -201,6 +201,7 @@ class AISEO_Admin {
 			'ai-seo-editor_page_aiseo-generator',
 			'ai-seo-editor_page_aiseo-links',
 			'ai-seo-editor_page_aiseo-auto-publisher',
+			'ai-seo-editor_page_aiseo-seo-title-fix',
 			'ai-seo-editor_page_aiseo-settings',
 			'ai-seo-editor_page_aiseo-github',
 			'ai-seo-editor_page_aiseo-logs',
