@@ -73,6 +73,159 @@ function aiseo_score_badge( int $score ): string {
 	);
 }
 
+function aiseo_admin_tone_class( string $tone ): string {
+	$map = [
+		'success' => 'success',
+		'good'    => 'success',
+		'green'   => 'success',
+		'warning' => 'warning',
+		'warn'    => 'warning',
+		'orange'  => 'warning',
+		'danger'  => 'danger',
+		'error'   => 'danger',
+		'bad'     => 'danger',
+		'red'     => 'danger',
+		'info'    => 'info',
+		'blue'    => 'info',
+		'muted'   => 'muted',
+		'idle'    => 'muted',
+		'none'    => 'muted',
+	];
+
+	return $map[ $tone ] ?? 'muted';
+}
+
+function aiseo_admin_status_badge( string $label, string $tone = 'muted', string $extra_class = '' ): string {
+	$classes = trim( 'aiseo-ui-badge aiseo-ui-badge--' . aiseo_admin_tone_class( $tone ) . ' ' . $extra_class );
+	return '<span class="' . esc_attr( $classes ) . '">' . esc_html( $label ) . '</span>';
+}
+
+function aiseo_admin_page_header( array $args = [] ): void {
+	$icon    = (string) ( $args['icon'] ?? 'dashicons-admin-generic' );
+	$title   = (string) ( $args['title'] ?? '' );
+	$subtitle = (string) ( $args['subtitle'] ?? '' );
+	$actions = is_array( $args['actions'] ?? null ) ? $args['actions'] : [];
+	$badges  = is_array( $args['badges'] ?? null ) ? $args['badges'] : [];
+	$eyebrow = (string) ( $args['eyebrow'] ?? '' );
+	?>
+	<header class="aiseo-page-header">
+		<div class="aiseo-page-header__main">
+			<div class="aiseo-page-header__icon">
+				<span class="dashicons <?php echo esc_attr( $icon ); ?>"></span>
+			</div>
+			<div class="aiseo-page-header__copy">
+				<?php if ( '' !== $eyebrow ) : ?>
+					<div class="aiseo-page-header__eyebrow"><?php echo esc_html( $eyebrow ); ?></div>
+				<?php endif; ?>
+				<h1 class="aiseo-page-header__title"><?php echo esc_html( $title ); ?></h1>
+				<?php if ( '' !== $subtitle ) : ?>
+					<p class="aiseo-page-header__subtitle"><?php echo esc_html( $subtitle ); ?></p>
+				<?php endif; ?>
+				<?php if ( ! empty( $badges ) ) : ?>
+					<div class="aiseo-page-header__badges">
+						<?php foreach ( $badges as $badge ) : ?>
+							<?php
+							$label = (string) ( $badge['label'] ?? '' );
+							if ( '' === $label ) {
+								continue;
+							}
+							echo wp_kses_post( aiseo_admin_status_badge( $label, (string) ( $badge['tone'] ?? 'muted' ) ) );
+							?>
+						<?php endforeach; ?>
+					</div>
+				<?php endif; ?>
+			</div>
+		</div>
+		<?php if ( ! empty( $actions ) ) : ?>
+			<div class="aiseo-page-header__actions">
+				<?php foreach ( $actions as $action ) : ?>
+					<?php
+					$tag     = ! empty( $action['href'] ) ? 'a' : 'button';
+					$classes = trim( 'button ' . (string) ( $action['class'] ?? 'button-secondary' ) );
+					$label   = (string) ( $action['label'] ?? '' );
+					$attrs   = '';
+
+					foreach ( (array) ( $action['attrs'] ?? [] ) as $name => $value ) {
+						$attrs .= ' ' . sanitize_key( (string) $name ) . '="' . esc_attr( (string) $value ) . '"';
+					}
+
+					if ( 'a' === $tag ) :
+						?>
+						<a class="<?php echo esc_attr( $classes ); ?>" href="<?php echo esc_url( (string) $action['href'] ); ?>"<?php echo $attrs; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
+							<?php echo esc_html( $label ); ?>
+						</a>
+					<?php else : ?>
+						<button type="<?php echo esc_attr( (string) ( $action['type'] ?? 'button' ) ); ?>" class="<?php echo esc_attr( $classes ); ?>"<?php echo $attrs; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
+							<?php echo esc_html( $label ); ?>
+						</button>
+					<?php endif; ?>
+				<?php endforeach; ?>
+			</div>
+		<?php endif; ?>
+	</header>
+	<?php
+}
+
+function aiseo_admin_stat_card( array $args = [] ): void {
+	$label   = (string) ( $args['label'] ?? '' );
+	$value   = (string) ( $args['value'] ?? '--' );
+	$meta    = (string) ( $args['meta'] ?? '' );
+	$icon    = (string) ( $args['icon'] ?? 'dashicons-chart-bar' );
+	$tone    = aiseo_admin_tone_class( (string) ( $args['tone'] ?? 'info' ) );
+	$href    = (string) ( $args['href'] ?? '' );
+	$counter = isset( $args['counter'] ) ? (string) $args['counter'] : '';
+	$tag     = '' !== $href ? 'a' : 'div';
+	?>
+	<<?php echo esc_html( $tag ); ?> class="aiseo-stat-card aiseo-stat-card--<?php echo esc_attr( $tone ); ?><?php echo '' !== $href ? ' aiseo-stat-card--link' : ''; ?>"<?php echo '' !== $href ? ' href="' . esc_url( $href ) . '"' : ''; ?>>
+		<div class="aiseo-stat-card__icon"><span class="dashicons <?php echo esc_attr( $icon ); ?>"></span></div>
+		<div class="aiseo-stat-card__body">
+			<div class="aiseo-stat-card__label"><?php echo esc_html( $label ); ?></div>
+			<div class="aiseo-stat-card__value"<?php echo '' !== $counter ? ' data-counter-target="' . esc_attr( $counter ) . '"' : ''; ?>><?php echo esc_html( $value ); ?></div>
+			<?php if ( '' !== $meta ) : ?>
+				<div class="aiseo-stat-card__meta"><?php echo esc_html( $meta ); ?></div>
+			<?php endif; ?>
+		</div>
+	</<?php echo esc_html( $tag ); ?>>
+	<?php
+}
+
+function aiseo_admin_empty_state( array $args = [] ): void {
+	$icon        = (string) ( $args['icon'] ?? 'dashicons-info-outline' );
+	$title       = (string) ( $args['title'] ?? '' );
+	$description = (string) ( $args['description'] ?? '' );
+	$actions     = is_array( $args['actions'] ?? null ) ? $args['actions'] : [];
+	?>
+	<div class="aiseo-empty-state">
+		<div class="aiseo-empty-state__icon"><span class="dashicons <?php echo esc_attr( $icon ); ?>"></span></div>
+		<?php if ( '' !== $title ) : ?>
+			<h3 class="aiseo-empty-state__title"><?php echo esc_html( $title ); ?></h3>
+		<?php endif; ?>
+		<?php if ( '' !== $description ) : ?>
+			<p class="aiseo-empty-state__description"><?php echo esc_html( $description ); ?></p>
+		<?php endif; ?>
+		<?php if ( ! empty( $actions ) ) : ?>
+			<div class="aiseo-empty-state__actions">
+				<?php foreach ( $actions as $action ) : ?>
+					<?php
+					$href    = (string) ( $action['href'] ?? '' );
+					$label   = (string) ( $action['label'] ?? '' );
+					$classes = trim( 'button ' . (string) ( $action['class'] ?? 'button-secondary' ) );
+					if ( '' === $label ) {
+						continue;
+					}
+					?>
+					<?php if ( '' !== $href ) : ?>
+						<a class="<?php echo esc_attr( $classes ); ?>" href="<?php echo esc_url( $href ); ?>"><?php echo esc_html( $label ); ?></a>
+					<?php else : ?>
+						<button type="button" class="<?php echo esc_attr( $classes ); ?>"><?php echo esc_html( $label ); ?></button>
+					<?php endif; ?>
+				<?php endforeach; ?>
+			</div>
+		<?php endif; ?>
+	</div>
+	<?php
+}
+
 function aiseo_get_first_paragraph( string $html ): string {
 	if ( preg_match( '/<p[^>]*>(.*?)<\/p>/is', $html, $matches ) ) {
 		return wp_strip_all_tags( $matches[1] );

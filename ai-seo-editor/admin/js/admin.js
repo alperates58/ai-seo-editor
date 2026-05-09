@@ -761,6 +761,16 @@
 		const draftBtn    = document.getElementById('aiseo-create-draft-btn');
 		const loadingEl   = document.getElementById('aiseo-generate-loading');
 		const previewCard = document.getElementById('aiseo-preview-card');
+		const wordCountEl = document.getElementById('aiseo-gen-word-count');
+		const tokenHintEl = document.querySelector('[data-generator-token-estimate]');
+
+		if (wordCountEl && tokenHintEl) {
+			const syncTokenHint = () => {
+				tokenHintEl.textContent = 'Tahmini taslak seviyesi: ' + (wordCountEl.value || '1200') + ' kelime';
+			};
+			wordCountEl.addEventListener('change', syncTokenHint);
+			syncTokenHint();
+		}
 
 		if (genBtn) {
 			genBtn.addEventListener('click', async () => {
@@ -1947,6 +1957,130 @@
 		}[operation] || 'AI Önerisi';
 	}
 
+	function initPremiumUi() {
+		document.querySelectorAll('.aiseo-compact-toggle').forEach((btn) => {
+			if (btn._aiseoCompactBound) return;
+			btn._aiseoCompactBound = true;
+			btn.addEventListener('click', () => {
+				const target = document.getElementById(btn.dataset.target || '');
+				if (!target) return;
+				target.classList.toggle('aiseo-compact');
+				btn.classList.toggle('is-active', target.classList.contains('aiseo-compact'));
+			});
+		});
+
+		document.querySelectorAll('[data-bulk-filter-chip]').forEach((btn) => {
+			if (btn._aiseoFilterChipBound) return;
+			btn._aiseoFilterChipBound = true;
+			btn.addEventListener('click', () => {
+				const filter = document.getElementById('aiseo-bulk-filter');
+				if (!filter) return;
+				filter.value = btn.dataset.bulkFilterChip || '';
+				filter.dispatchEvent(new Event('change'));
+				document.querySelectorAll('[data-bulk-filter-chip]').forEach((chip) => chip.classList.remove('is-active'));
+				btn.classList.add('is-active');
+			});
+		});
+
+		const presetWrap = document.querySelector('[data-generator-presets]');
+		if (presetWrap && !presetWrap._aiseoPresetBound) {
+			presetWrap._aiseoPresetBound = true;
+			presetWrap.querySelectorAll('[data-target-words]').forEach((btn) => {
+				btn.addEventListener('click', () => {
+					const wordSelect = document.getElementById('aiseo-gen-word-count');
+					const tokenHint = document.querySelector('[data-generator-token-estimate]');
+					const words = parseInt(btn.dataset.targetWords || '0', 10);
+					if (wordSelect && words) {
+						wordSelect.value = String(words);
+						wordSelect.dispatchEvent(new Event('change'));
+					}
+					if (tokenHint && words) {
+						tokenHint.textContent = 'Tahmini taslak seviyesi: ' + words + ' kelime';
+					}
+					presetWrap.querySelectorAll('.aiseo-chip').forEach((chip) => chip.classList.remove('is-active'));
+					btn.classList.add('is-active');
+				});
+			});
+		}
+	}
+
+	function initSeoTitleFix() {
+		const allCheck = document.getElementById('aiseo-stf-select-all');
+		const allCheckHeader = document.getElementById('aiseo-stf-select-all-header');
+		const fixSelectedBtn = document.getElementById('aiseo-stf-fix-selected');
+		if (!fixSelectedBtn) return;
+
+		async function fixPost(postId) {
+			const statusEl = document.getElementById('aiseo-stf-row-status-' + postId);
+			const titleEl = document.getElementById('aiseo-stf-title-' + postId);
+			const btn = document.querySelector('.aiseo-stf-fix-btn[data-post-id="' + postId + '"]');
+			if (statusEl) statusEl.textContent = '...';
+			if (btn) btn.disabled = true;
+
+			try {
+				const res = await fetch(restUrl + 'aiseo/v1/seo-title/fix/' + postId, {
+					method: 'POST',
+					headers: { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' },
+				});
+				const data = await res.json();
+				if (data.success && data.seo_title) {
+					if (titleEl) titleEl.textContent = data.seo_title;
+					if (statusEl) statusEl.textContent = 'Done';
+				} else {
+					if (statusEl) statusEl.textContent = data.message || '--';
+					if (btn) btn.disabled = false;
+				}
+			} catch (e) {
+				if (statusEl) statusEl.textContent = 'Error';
+				if (btn) btn.disabled = false;
+			}
+		}
+
+		function syncSelectAll() {
+			const checkboxes = document.querySelectorAll('.aiseo-stf-checkbox');
+			const checked = document.querySelectorAll('.aiseo-stf-checkbox:checked');
+			const allSelected = checkboxes.length > 0 && checked.length === checkboxes.length;
+			if (allCheck) allCheck.checked = allSelected;
+			if (allCheckHeader) allCheckHeader.checked = allSelected;
+			fixSelectedBtn.disabled = checked.length === 0;
+		}
+
+		document.querySelectorAll('.aiseo-stf-fix-btn').forEach((btn) => {
+			btn.addEventListener('click', () => fixPost(btn.dataset.postId));
+		});
+		document.querySelectorAll('.aiseo-stf-checkbox').forEach((cb) => {
+			cb.addEventListener('change', syncSelectAll);
+		});
+		[allCheck, allCheckHeader].forEach((el) => {
+			if (!el) return;
+			el.addEventListener('change', () => {
+				document.querySelectorAll('.aiseo-stf-checkbox').forEach((cb) => {
+					cb.checked = el.checked;
+				});
+				syncSelectAll();
+			});
+		});
+
+		fixSelectedBtn.addEventListener('click', async () => {
+			const selected = Array.from(document.querySelectorAll('.aiseo-stf-checkbox:checked')).map((cb) => cb.value);
+			if (!selected.length) return;
+			fixSelectedBtn.disabled = true;
+			const progressWrap = document.getElementById('aiseo-stf-progress-wrap');
+			const progressBar = document.getElementById('aiseo-stf-progress');
+			const statusEl = document.getElementById('aiseo-stf-status');
+			if (progressWrap) progressWrap.style.display = 'block';
+			let done = 0;
+			for (const postId of selected) {
+				if (statusEl) statusEl.textContent = done + ' / ' + selected.length;
+				await fixPost(postId);
+				done += 1;
+				if (progressBar) progressBar.style.width = Math.round((done / selected.length) * 100) + '%';
+			}
+			if (statusEl) statusEl.textContent = selected.length + ' yazi islendi.';
+			fixSelectedBtn.disabled = false;
+		});
+	}
+
 	/* ------------------------------------------------------------------ */
 	/* Settings Page                                                        */
 	/* ------------------------------------------------------------------ */
@@ -1955,6 +2089,7 @@
 		const testBtn    = document.getElementById('aiseo-test-key');
 		const toggleBtn  = document.getElementById('aiseo-toggle-key');
 		const keyInput   = document.getElementById('aiseo-api-key');
+		const navItems   = document.querySelectorAll('[data-settings-panel]');
 
 		if (toggleBtn && keyInput) {
 			toggleBtn.addEventListener('click', () => {
@@ -1962,6 +2097,18 @@
 				keyInput.type = type;
 			});
 		}
+
+		navItems.forEach((item) => {
+			item.addEventListener('click', () => {
+				const key = item.dataset.settingsPanel;
+				navItems.forEach((nav) => nav.classList.toggle('is-active', nav === item));
+				document.querySelectorAll('[data-settings-content]').forEach((panel) => {
+					const active = panel.dataset.settingsContent === key;
+					panel.classList.toggle('is-active', active);
+					panel.hidden = !active;
+				});
+			});
+		});
 
 		if (testBtn && keyInput) {
 			testBtn.addEventListener('click', async () => {
@@ -2499,6 +2646,7 @@
 		const page = Config.currentPage || '';
 
 		initModalClose();
+		initPremiumUi();
 
 		if (page === 'aiseo-posts' || page === '') {
 			initPostListAnalyze();
@@ -2527,6 +2675,9 @@
 		}
 		if (page === 'aiseo-dashboard') {
 			initDashboard();
+		}
+		if (page === 'aiseo-seo-title-fix') {
+			initSeoTitleFix();
 		}
 
 		// Also init optimize buttons on any page (post detail is embedded in posts page)
