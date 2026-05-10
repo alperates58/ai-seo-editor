@@ -558,7 +558,7 @@ class AISEO_Auto_Publisher {
 			$posts_to_sort[] = $post;
 		}
 
-		$ordered = $this->diversify_posts_by_category( $posts_to_sort, count( $posts_to_sort ), $this->get_last_published_category_ids() );
+		$ordered = $this->build_queue_order_by_subcategory_coverage( $posts_to_sort, $this->get_last_published_category_ids() );
 		$stamp   = time();
 		foreach ( $ordered as $index => $post ) {
 			update_post_meta( $post->ID, self::QUEUE_ORDER_META, $stamp + $index );
@@ -673,6 +673,166 @@ class AISEO_Auto_Publisher {
 	private function get_root_category_id_for( int $category_id ): int {
 		$ancestors = get_ancestors( $category_id, 'category' );
 		return empty( $ancestors ) ? $category_id : (int) end( $ancestors );
+	}
+
+	private function get_primary_category_id( int $post_id ): int {
+		$categories = wp_get_post_categories( $post_id );
+		if ( empty( $categories ) ) {
+			return 0;
+		}
+
+		usort( $categories, function ( $a, $b ) {
+			$depth_compare = $this->get_category_depth( (int) $b ) <=> $this->get_category_depth( (int) $a );
+			if ( 0 !== $depth_compare ) {
+				return $depth_compare;
+			}
+
+			return (int) $a <=> (int) $b;
+		} );
+
+		return (int) $categories[0];
+	}
+
+	private function get_category_depth( int $category_id ): int {
+		if ( $category_id <= 0 ) {
+			return 0;
+		}
+
+		return count( get_ancestors( $category_id, 'category' ) );
+	}
+
+	private function get_category_publish_counts( array $category_ids ): array {
+		$counts = [];
+
+		foreach ( array_unique( array_map( 'intval', $category_ids ) ) as $category_id ) {
+			if ( $category_id <= 0 ) {
+				$counts[ $category_id ] = 0;
+				continue;
+			}
+
+			$term                 = get_term( $category_id, 'category' );
+			$counts[ $category_id ] = ( $term instanceof WP_Term && ! is_wp_error( $term ) ) ? (int) $term->count : 0;
+		}
+
+		return $counts;
+	}
+
+	private function build_queue_order_by_subcategory_coverage( array $posts, array $avoid_root_category_ids = [] ): array {
+		$buckets      = [];
+		$category_ids = [];
+
+		foreach ( $posts as $post ) {
+			if ( ! $post instanceof WP_Post ) {
+				continue;
+			}
+
+			$category_id   = $this->get_primary_category_id( $post->ID );
+			$root_id       = $category_id > 0 ? $this->get_root_category_id_for( $category_id ) : 0;
+			$category_ids[] = $category_id;
+
+			if ( ! isset( $buckets[ $category_id ] ) ) {
+				$buckets[ $category_id ] = [
+					'category_id'   => $category_id,
+					'root_id'       => $root_id,
+					'publish_count' => 0,
+					'posts'         => [],
+					'first_date'    => (string) $post->post_date,
+				];
+			}
+
+			$buckets[ $category_id ]['posts'][] = $post;
+			if ( strcmp( (string) $post->post_date, $buckets[ $category_id ]['first_date'] ) < 0 ) {
+				$buckets[ $category_id ]['first_date'] = (string) $post->post_date;
+			}
+		}
+
+		if ( empty( $buckets ) ) {
+			return [];
+		}
+
+		$publish_counts = $this->get_category_publish_counts( $category_ids );
+		foreach ( $buckets as $category_id => $bucket ) {
+			$buckets[ $category_id ]['publish_count'] = (int) ( $publish_counts[ (int) $category_id ] ?? 0 );
+		}
+
+		$ordered_bucket_ids = array_keys( $buckets );
+		usort( $ordered_bucket_ids, function ( $a, $b ) use ( $buckets ) {
+			$count_compare = (int) $buckets[ $a ]['publish_count'] <=> (int) $buckets[ $b ]['publish_count'];
+			if ( 0 !== $count_compare ) {
+				return $count_compare;
+			}
+
+			$date_compare = strcmp( (string) $buckets[ $a ]['first_date'], (string) $buckets[ $b ]['first_date'] );
+			if ( 0 !== $date_compare ) {
+				return $date_compare;
+			}
+
+			return (int) $a <=> (int) $b;
+		} );
+
+		$tiers = [];
+		foreach ( $ordered_bucket_ids as $category_id ) {
+			$tiers[ (int) $buckets[ $category_id ]['publish_count'] ][ $category_id ] = $buckets[ $category_id ];
+		}
+
+		ksort( $tiers, SORT_NUMERIC );
+
+		$result            = [];
+		$previous_category = 0;
+		$previous_root     = 0;
+		$avoid_root_map    = array_fill_keys( array_map( 'intval', $avoid_root_category_ids ), true );
+
+		foreach ( $tiers as $tier_buckets ) {
+			while ( ! empty( $tier_buckets ) ) {
+				$next_category_id = $this->select_next_queue_bucket(
+					$tier_buckets,
+					$previous_category,
+					$previous_root,
+					$avoid_root_map,
+					empty( $result )
+				);
+
+				if ( null === $next_category_id ) {
+					break;
+				}
+
+				$result[]          = array_shift( $tier_buckets[ $next_category_id ]['posts'] );
+				$previous_category = (int) $tier_buckets[ $next_category_id ]['category_id'];
+				$previous_root     = (int) $tier_buckets[ $next_category_id ]['root_id'];
+
+				if ( empty( $tier_buckets[ $next_category_id ]['posts'] ) ) {
+					unset( $tier_buckets[ $next_category_id ] );
+				}
+			}
+		}
+
+		return $result;
+	}
+
+	private function select_next_queue_bucket( array $buckets, int $previous_category, int $previous_root, array $avoid_root_map, bool $is_first_pick ): ?int {
+		if ( empty( $buckets ) ) {
+			return null;
+		}
+
+		$best_category_id = null;
+		$best_score       = null;
+
+		foreach ( $buckets as $category_id => $bucket ) {
+			$score = [
+				$previous_category > 0 && (int) $bucket['category_id'] === $previous_category ? 1 : 0,
+				$previous_root > 0 && (int) $bucket['root_id'] === $previous_root ? 1 : 0,
+				$is_first_pick && ! empty( $avoid_root_map[ (int) $bucket['root_id'] ] ) ? 1 : 0,
+				(string) $bucket['first_date'],
+				(int) $category_id,
+			];
+
+			if ( null === $best_score || $score < $best_score ) {
+				$best_score       = $score;
+				$best_category_id = (int) $category_id;
+			}
+		}
+
+		return $best_category_id;
 	}
 
 	private function diversify_posts_by_category( array $posts, int $limit, array $avoid_category_ids = [] ): array {
