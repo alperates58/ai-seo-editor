@@ -300,6 +300,7 @@ class AISEO_Auto_Publisher {
 			}
 
 			$content = aiseo_preserve_bracket_blocks( $original_content, $content );
+			$content = aiseo_demote_content_h1_to_h2( $content );
 
 			wp_update_post( [ 'ID' => $post_id, 'post_title' => $title, 'post_content' => $content ] );
 			$this->logger->invalidate_cache( $post_id );
@@ -413,7 +414,7 @@ class AISEO_Auto_Publisher {
 			}
 
 			$new_title   = $title;
-			$new_content = wp_kses_post( $result['content'] );
+			$new_content = wp_kses_post( aiseo_demote_content_h1_to_h2( $result['content'] ) );
 			$new_meta    = aiseo_normalize_meta_description( (string) ( $result['meta_description'] ?? $meta ) );
 			$tokens      = (int) ( $result['tokens_used'] ?? 0 );
 

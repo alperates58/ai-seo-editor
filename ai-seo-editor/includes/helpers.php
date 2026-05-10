@@ -432,6 +432,22 @@ function aiseo_get_criterion_fix_action( array $criterion ): array {
 	return [];
 }
 
+function aiseo_demote_content_h1_to_h2( string $html ): string {
+	if ( ! preg_match( '/<h1[\s>]/i', $html ) ) {
+		return $html;
+	}
+	return preg_replace_callback(
+		'/<h1(\b[^>]*)>(.*?)<\/h1>/is',
+		static function ( array $m ): string {
+			if ( trim( wp_strip_all_tags( $m[2] ) ) === '' ) {
+				return '';
+			}
+			return '<h2' . $m[1] . '>' . $m[2] . '</h2>';
+		},
+		$html
+	) ?? $html;
+}
+
 function aiseo_render_criterion( array $criterion ): string {
 	$status  = esc_attr( $criterion['status'] ?? 'error' );
 	$id      = esc_attr( $criterion['id'] ?? '' );

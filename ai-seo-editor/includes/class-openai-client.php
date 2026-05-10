@@ -187,7 +187,7 @@ class AISEO_OpenAI_Client {
 		$messages = [
 			[
 				'role'    => 'system',
-				'content' => 'Sen bir SEO icerik editorusun. WordPress HTML icerigini koruyarak H2/H3 yapisini iyilestir. En az 2 anlamli H2 kullan, uygun yerlerde H3 ekle, en az bir H2 icinde odak kelimeyi dogal bicimde gecir. Mevcut gercekleri koru. ' . $this->protected_block_instruction() . ' YALNIZCA temiz WordPress HTML dondur; aciklama, markdown fence, html/body etiketi ekleme.',
+				'content' => 'Sen bir SEO icerik editorusun. WordPress HTML icerigini koruyarak H2/H3 yapisini iyilestir. En az 2 anlamli H2 kullan, uygun yerlerde H3 ekle, en az bir H2 icinde odak kelimeyi dogal bicimde gecir. Mevcut gercekleri koru. <h1> uretme; icerik basliklar yalnizca H2/H3 olmali. ' . $this->protected_block_instruction() . ' YALNIZCA temiz WordPress HTML dondur; aciklama, markdown fence, html/body etiketi ekleme.',
 			],
 			[
 				'role'    => 'user',
@@ -215,7 +215,7 @@ class AISEO_OpenAI_Client {
 		$messages = [
 			[
 				'role'    => 'system',
-				'content' => "Sen bir okunabilirlik editorusun. Verilen WordPress HTML icerigini bastan sona duzenle: cumleleri kisalt, uzun paragraflari bol, aktif anlatim kullan, gecis kelimeleri ekle, H2/H3 yapisini ve tum gercekleri koru. Ton: {$tone}.{$keyword_note} Icerigi kisaltma; kapsam zayifsa yalnizca dogal ornekler ve aciklayici paragraflar ekle. Yeni FAQ, yeni sonuc bolumu veya tekrar eden anahtar kelime listeleri ekleme. " . $this->protected_block_instruction() . " YALNIZCA temiz WordPress HTML dondur.",
+				'content' => "Sen bir okunabilirlik editorusun. Verilen WordPress HTML icerigini bastan sona duzenle: cumleleri kisalt, uzun paragraflari bol, aktif anlatim kullan, gecis kelimeleri ekle, H2/H3 yapisini ve tum gercekleri koru. Ton: {$tone}.{$keyword_note} Icerigi kisaltma; kapsam zayifsa yalnizca dogal ornekler ve aciklayici paragraflar ekle. Yeni FAQ, yeni sonuc bolumu veya tekrar eden anahtar kelime listeleri ekleme. <h1> uretme; icerik basliklar yalnizca H2/H3 olmali. " . $this->protected_block_instruction() . " YALNIZCA temiz WordPress HTML dondur.",
 			],
 			[
 				'role'    => 'user',
@@ -281,7 +281,7 @@ class AISEO_OpenAI_Client {
 		$messages = [
 			[
 				'role'    => 'system',
-				'content' => "Sen bir SEO icerik editorusun. {$instruction} Icerigin tamamini WordPress HTML olarak yeniden duzenle. Odak kelimeyi yalnizca gerekli yerlerde kullan: ilk paragraf ve en fazla bir H2 yeterlidir. Yeni FAQ, sonuc bolumu veya anahtar kelime listesi ekleme. Gercekleri koru, gerekirse kisa aciklayici eklemeler yap. " . $this->protected_block_instruction() . " YALNIZCA temiz WordPress HTML dondur.",
+				'content' => "Sen bir SEO icerik editorusun. {$instruction} Icerigin tamamini WordPress HTML olarak yeniden duzenle. Odak kelimeyi yalnizca gerekli yerlerde kullan: ilk paragraf ve en fazla bir H2 yeterlidir. Yeni FAQ, sonuc bolumu veya anahtar kelime listesi ekleme. Gercekleri koru, gerekirse kisa aciklayici eklemeler yap. <h1> uretme; icerik basliklar yalnizca H2/H3 olmali. " . $this->protected_block_instruction() . " YALNIZCA temiz WordPress HTML dondur.",
 			],
 			[
 				'role'    => 'user',
@@ -417,7 +417,7 @@ class AISEO_OpenAI_Client {
 		$messages = [
 			[
 				'role'    => 'system',
-				'content' => 'Sen deneyimli bir Turkce SEO editorusun. Verilen WordPress yazisini Yoast benzeri kriterlere gore kapsamli bicimde iyilestir. Cevabinda analiz, aciklama, madde madde yorum, ingilizce not veya hesaplama sureci yazma. Yalnizca su formati dondur: <article data-aiseo-output="1">...temiz WordPress HTML...</article>. Kurallar: odak kelime baslikta/ilk paragrafta/en fazla bir H2 icinde dogal gecsin. Konuyu oncelikle mevcut basliktan anla; odak kelime eksikse basligi konu kaynagi kabul et. Anahtar kelime yogunlugunu %0.8-1.8 araliginda tut; ayni kelimeyi sirf skor icin tekrar etme. Okunabilirligi dusurme: kisa cumleler, kisa paragraflar, aktif anlatim ve gecis kelimeleri kullan. Icerik 1000 kelimenin altindaysa kapsamli ama gercekci bicimde genislet, en az 2 H2 ve uygun H3 kullan. Mevcut FAQ varsa yeni FAQ ekleme; mevcut sonuc bolumu varsa ikinci sonuc bolumu ekleme. ' . $this->protected_block_instruction() . ' Mevcut gercekleri bozma, markdown fence, html/body etiketi kullanma.',
+				'content' => 'Sen deneyimli bir Turkce SEO editorusun. Verilen WordPress yazisini Yoast benzeri kriterlere gore kapsamli bicimde iyilestir. Cevabinda analiz, aciklama, madde madde yorum, ingilizce not veya hesaplama sureci yazma. Yalnizca su formati dondur: <article data-aiseo-output="1">...temiz WordPress HTML...</article>. Kurallar: odak kelime baslikta/ilk paragrafta/en fazla bir H2 icinde dogal gecsin. Konuyu oncelikle mevcut basliktan anla; odak kelime eksikse basligi konu kaynagi kabul et. Anahtar kelime yogunlugunu %0.8-1.8 araliginda tut; ayni kelimeyi sirf skor icin tekrar etme. Okunabilirligi dusurme: kisa cumleler, kisa paragraflar, aktif anlatim ve gecis kelimeleri kullan. Icerik 1000 kelimenin altindaysa kapsamli ama gercekci bicimde genislet, en az 2 H2 ve uygun H3 kullan. Mevcut FAQ varsa yeni FAQ ekleme; mevcut sonuc bolumu varsa ikinci sonuc bolumu ekleme. Icerik icinde <h1> veya markdown # baslik KULLANMA; icerik basliklar yalnizca H2/H3 olmali; mevcut <h1> gorursen icerige dahil etme. ' . $this->protected_block_instruction() . ' Mevcut gercekleri bozma, markdown fence, html/body etiketi kullanma.',
 			],
 			[
 				'role'    => 'user',
@@ -508,7 +508,7 @@ class AISEO_OpenAI_Client {
 				'role'    => 'system',
 				'content' => "Sen uzman bir SEO icerik yazarisisin. Verilen parametrelerle tam makale uret. JSON formatinda dondur:
 {\"title\":\"...\",\"meta_description\":\"...\",\"focus_keyword\":\"...\",\"content\":{\"introduction\":\"<p>...</p>\",\"sections\":[{\"heading\":\"H2 baslik\",\"content\":\"<p>...</p>\",\"subsections\":[{\"heading\":\"H3 baslik\",\"content\":\"<p>...</p>\"}]}],\"conclusion\":\"<p>...</p>\",\"faq\":[{\"question\":\"...\",\"answer\":\"...\"}]},\"word_count_estimate\":0,\"suggested_tags\":[]}
-Kurallar: Icerik {$lang_str} dilinde olacak, ton: {$tone}, yaklasik {$target_wc} kelime, Google EEAT prensiplerine uygun, dogal ve okuyucu odakli. meta_description 120-155 karakter arasinda olacak ve 155 karakteri ASLA gecmeyecek. suggested_tags alani 8-12 adet, 2-4 kelimelik, kisa olmayan SEO etiketi icermeli.{$faq_note}",
+Kurallar: Icerik {$lang_str} dilinde olacak, ton: {$tone}, yaklasik {$target_wc} kelime, Google EEAT prensiplerine uygun, dogal ve okuyucu odakli. meta_description 120-155 karakter arasinda olacak ve 155 karakteri ASLA gecmeyecek. suggested_tags alani 8-12 adet, 2-4 kelimelik, kisa olmayan SEO etiketi icermeli.{$faq_note} Icerik bolumlerinde <h1> veya markdown # baslik KULLANMA; WordPress sayfa H1'i tema tarafindan basilir, icerik basliklar yalnizca H2/H3 olmali.",
 			],
 			[
 				'role'    => 'user',
@@ -806,8 +806,9 @@ Kurallar: Icerik {$lang_str} dilinde olacak, ton: {$tone}, yaklasik {$target_wc}
 		$html = preg_replace( '/\s*```\s*$/', '', $html );
 		$html = preg_replace( '/^\s*(?:<!doctype\s+html[^>]*>|<html[^>]*>|<body[^>]*>)/i', '', $html );
 		$html = preg_replace( '/(?:<\/body>|<\/html>)\s*$/i', '', $html );
+		$html = aiseo_demote_content_h1_to_h2( trim( (string) $html ) );
 
-		return trim( (string) $html );
+		return trim( $html );
 	}
 
 	private function content_has_faq( string $content ): bool {

@@ -144,6 +144,7 @@ class AISEO_Article_Generator {
 		$html = preg_replace( '/\s*```\s*$/', '', $html );
 		$html = preg_replace( '/^\s*(?:<!doctype\s+html[^>]*>|<html[^>]*>|<body[^>]*>)/i', '', $html );
 		$html = preg_replace( '/(?:<\/body>|<\/html>)\s*$/i', '', $html );
+		$html = aiseo_demote_content_h1_to_h2( trim( (string) $html ) );
 
 		return wp_kses_post( trim( $html ) );
 	}
