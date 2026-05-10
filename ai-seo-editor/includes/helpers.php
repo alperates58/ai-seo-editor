@@ -174,9 +174,17 @@ function aiseo_admin_stat_card( array $args = [] ): void {
 	$tone    = aiseo_admin_tone_class( (string) ( $args['tone'] ?? 'info' ) );
 	$href    = (string) ( $args['href'] ?? '' );
 	$counter = isset( $args['counter'] ) ? (string) $args['counter'] : '';
+	$attrs   = is_array( $args['attrs'] ?? null ) ? $args['attrs'] : [];
 	$tag     = '' !== $href ? 'a' : 'div';
+	$attr_html = '';
+	foreach ( $attrs as $attr_key => $attr_value ) {
+		if ( '' === (string) $attr_key ) {
+			continue;
+		}
+		$attr_html .= sprintf( ' %s="%s"', esc_attr( (string) $attr_key ), esc_attr( (string) $attr_value ) );
+	}
 	?>
-	<<?php echo esc_html( $tag ); ?> class="aiseo-stat-card aiseo-stat-card--<?php echo esc_attr( $tone ); ?><?php echo '' !== $href ? ' aiseo-stat-card--link' : ''; ?>"<?php echo '' !== $href ? ' href="' . esc_url( $href ) . '"' : ''; ?>>
+	<<?php echo esc_html( $tag ); ?> class="aiseo-stat-card aiseo-stat-card--<?php echo esc_attr( $tone ); ?><?php echo '' !== $href ? ' aiseo-stat-card--link' : ''; ?>"<?php echo '' !== $href ? ' href="' . esc_url( $href ) . '"' : ''; ?><?php echo $attr_html; ?>>
 		<div class="aiseo-stat-card__icon"><span class="dashicons <?php echo esc_attr( $icon ); ?>"></span></div>
 		<div class="aiseo-stat-card__body">
 			<div class="aiseo-stat-card__label"><?php echo esc_html( $label ); ?></div>

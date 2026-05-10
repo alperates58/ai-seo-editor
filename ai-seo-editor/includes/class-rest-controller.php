@@ -107,6 +107,12 @@ class AISEO_Rest_Controller {
 			'permission_callback' => [ $this, 'check_permissions' ],
 		] );
 
+		register_rest_route( self::NAMESPACE, '/links/opportunities', [
+			'methods'             => WP_REST_Server::READABLE,
+			'callback'            => [ $this, 'get_link_opportunities' ],
+			'permission_callback' => [ $this, 'check_permissions' ],
+		] );
+
 		register_rest_route( self::NAMESPACE, '/links/(?P<post_id>\d+)/compute', [
 			'methods'             => WP_REST_Server::CREATABLE,
 			'callback'            => [ $this, 'compute_links' ],
@@ -116,6 +122,12 @@ class AISEO_Rest_Controller {
 		register_rest_route( self::NAMESPACE, '/links/apply', [
 			'methods'             => WP_REST_Server::CREATABLE,
 			'callback'            => [ $this, 'apply_links' ],
+			'permission_callback' => [ $this, 'check_permissions' ],
+		] );
+
+		register_rest_route( self::NAMESPACE, '/links/bulk-apply', [
+			'methods'             => WP_REST_Server::CREATABLE,
+			'callback'            => [ $this, 'bulk_apply_links' ],
 			'permission_callback' => [ $this, 'check_permissions' ],
 		] );
 
@@ -763,6 +775,32 @@ class AISEO_Rest_Controller {
 		return $this->ok( [ 'posts' => $linker->find_posts_without_internal_links( $limit ) ] );
 	}
 
+	public function get_link_opportunities( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+		$client            = new AISEO_OpenAI_Client( $this->settings );
+		$linker            = new AISEO_Internal_Linker( $client, $this->logger );
+		$limit             = max( 1, min( 100, absint( $request->get_param( 'limit' ) ?? 25 ) ) );
+		$suggestion_limit  = max( 1, min( 5, absint( $request->get_param( 'suggestion_limit' ) ?? 3 ) ) );
+		$posts             = $linker->get_linkless_opportunities( $limit, $suggestion_limit );
+		$total_missing     = count( $linker->find_posts_without_internal_links( 300 ) );
+		$total_suggestions = 0;
+
+		foreach ( $posts as $post ) {
+			$total_suggestions += (int) ( $post['suggestion_count'] ?? 0 );
+		}
+
+		return $this->ok(
+			[
+				'posts' => $posts,
+				'stats' => [
+					'missing_posts'     => $total_missing,
+					'loaded_posts'      => count( $posts ),
+					'total_suggestions' => $total_suggestions,
+					'auto_apply_limit'  => $suggestion_limit,
+				],
+			]
+		);
+	}
+
 	public function compute_links( WP_REST_Request $request ): WP_REST_Response|WP_Error {
 		$post_id = absint( $request->get_param( 'post_id' ) );
 		if ( ! $this->post_exists( $post_id ) ) {
@@ -830,6 +868,115 @@ class AISEO_Rest_Controller {
 				'auto_saved' => $auto_save && $changed,
 			],
 			__( 'İç linkler editörde uygulanmak üzere hazırlandı.', 'ai-seo-editor' )
+		);
+	}
+
+	public function bulk_apply_links( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+		$post_ids             = array_values( array_filter( array_map( 'absint', (array) ( $request->get_param( 'post_ids' ) ?? [] ) ) ) );
+		$suggestions_per_post = max( 1, min( 5, absint( $request->get_param( 'suggestions_per_post' ) ?? 3 ) ) );
+
+		if ( empty( $post_ids ) ) {
+			return new WP_Error( 'aiseo_missing_param', __( 'Toplu uygulama icin en az bir yazi secilmelidir.', 'ai-seo-editor' ), [ 'status' => 422 ] );
+		}
+
+		$post_ids  = array_slice( $post_ids, 0, 30 );
+		$client    = new AISEO_OpenAI_Client( $this->settings );
+		$linker    = new AISEO_Internal_Linker( $client, $this->logger );
+		$results   = [];
+		$applied   = 0;
+		$unchanged = 0;
+		$failed    = 0;
+
+		foreach ( $post_ids as $post_id ) {
+			if ( ! $this->post_exists( $post_id ) ) {
+				$results[] = [
+					'post_id' => $post_id,
+					'success' => false,
+					'message' => __( 'Yazi bulunamadi.', 'ai-seo-editor' ),
+				];
+				$failed++;
+				continue;
+			}
+
+			$suggestions    = $linker->find_suggestions( $post_id );
+			$suggestion_ids = $linker->extract_suggestion_ids( is_array( $suggestions ) ? $suggestions : [], $suggestions_per_post );
+
+			if ( empty( $suggestion_ids ) ) {
+				$results[] = [
+					'post_id' => $post_id,
+					'title'   => get_the_title( $post_id ),
+					'success' => false,
+					'changed' => false,
+					'message' => __( 'Uygulanabilir ic link onerisi bulunamadi.', 'ai-seo-editor' ),
+				];
+				$failed++;
+				continue;
+			}
+
+			$old_content = (string) get_post_field( 'post_content', $post_id );
+			$new_content = (string) $linker->apply_suggestions( $post_id, $suggestion_ids, $old_content );
+			$new_content = aiseo_preserve_bracket_blocks( $old_content, $new_content );
+			$changed     = $new_content !== $old_content;
+
+			if ( ! $changed ) {
+				$results[] = [
+					'post_id'             => $post_id,
+					'title'               => get_the_title( $post_id ),
+					'success'             => true,
+					'changed'             => false,
+					'applied_suggestions' => count( $suggestion_ids ),
+					'message'             => __( 'Oneriler hesaplandi fakat icerikte degisiklik olusmadi.', 'ai-seo-editor' ),
+				];
+				$unchanged++;
+				continue;
+			}
+
+			$post = get_post( $post_id );
+			if ( $post instanceof WP_Post && post_type_supports( $post->post_type, 'revisions' ) ) {
+				wp_save_post_revision( $post_id );
+			}
+
+			$updated = wp_update_post( [
+				'ID'           => $post_id,
+				'post_content' => $new_content,
+			], true );
+
+			if ( is_wp_error( $updated ) ) {
+				$results[] = [
+					'post_id' => $post_id,
+					'title'   => get_the_title( $post_id ),
+					'success' => false,
+					'changed' => false,
+					'message' => $updated->get_error_message(),
+				];
+				$failed++;
+				continue;
+			}
+
+			$this->logger->invalidate_cache( $post_id );
+			$results[] = [
+				'post_id'             => $post_id,
+				'title'               => get_the_title( $post_id ),
+				'success'             => true,
+				'changed'             => true,
+				'applied_suggestions' => count( $suggestion_ids ),
+				'edit_url'            => admin_url( 'post.php?post=' . $post_id . '&action=edit' ),
+				'message'             => __( 'Ic linkler eklendi ve yazi kaydedildi.', 'ai-seo-editor' ),
+			];
+			$applied++;
+		}
+
+		return $this->ok(
+			[
+				'results' => $results,
+				'summary' => [
+					'total'     => count( $post_ids ),
+					'applied'   => $applied,
+					'unchanged' => $unchanged,
+					'failed'    => $failed,
+				],
+			],
+			__( 'Toplu ic link uygulamasi tamamlandi.', 'ai-seo-editor' )
 		);
 	}
 

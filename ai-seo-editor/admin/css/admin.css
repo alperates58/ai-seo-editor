@@ -2619,6 +2619,10 @@
 	margin-bottom: 20px;
 }
 
+.aiseo-links-layout--bulk {
+	align-items: start;
+}
+
 .aiseo-form-stack {
 	display: grid;
 	gap: 16px;
@@ -2685,6 +2689,47 @@
 .aiseo-info-card {
 	display: grid;
 	gap: 8px;
+}
+
+.aiseo-empty-state--compact {
+	padding: 24px 18px;
+}
+
+.aiseo-links-bulk-summary {
+	display: grid;
+	gap: 14px;
+}
+
+.aiseo-links-bulk-results {
+	margin: 0;
+	padding-left: 18px;
+	display: grid;
+	gap: 10px;
+}
+
+.aiseo-status-pill {
+	display: inline-flex;
+	align-items: center;
+	padding: 4px 10px;
+	border-radius: 999px;
+	font-size: 12px;
+	font-weight: 700;
+	margin-right: 8px;
+}
+
+.aiseo-status-pill--success {
+	background: rgba(22,163,74,.12);
+	color: #166534;
+}
+
+.aiseo-status-pill--warning {
+	background: rgba(245,158,11,.14);
+	color: #92400e;
+}
+
+.aiseo-status-pill--danger {
+	background: rgba(239,68,68,.12);
+	color: #991b1b;
 }
 
 .aiseo-links-info-grid {

@@ -214,6 +214,7 @@
 		generateArticle:  (params)     => API.request('/generate', 'POST', params),
 		createDraft:      (data)       => API.request('/generate/create-draft', 'POST', data),
 		getLinklessPosts: ()           => API.request('/links/missing?limit=50', 'GET', null, { timeout: 25000 }),
+		getLinkOpportunities: ()       => API.request('/links/opportunities?limit=25&suggestion_limit=3', 'GET', null, { timeout: 45000 }),
 		getLinks:         (pid)        => API.request('/links/' + pid),
 		computeLinks:     (pid)        => API.request('/links/' + pid + '/compute', 'POST'),
 		applyLinks:       (pid, ids, content, autoSave) => {
@@ -222,6 +223,10 @@
 			if (autoSave) body.auto_save = true;
 			return API.request('/links/apply', 'POST', body);
 		},
+		bulkApplyLinks:   (postIds, suggestionsPerPost) => API.request('/links/bulk-apply', 'POST', {
+			post_ids: postIds || [],
+			suggestions_per_post: suggestionsPerPost || 3,
+		}),
 		optimizeTags:     (pid, data)  => API.request('/tags/optimize/' + pid, 'POST', data || {}),
 		getSettings:      ()           => API.request('/settings'),
 		saveSettings:     (data)       => API.request('/settings', 'POST', data),
@@ -1048,6 +1053,290 @@
 				'<td>' + scoreBadge(pct) + '</td>';
 			tbody.appendChild(row);
 		});
+	}
+
+	function initInternalLinksModern() {
+		const listBody = document.getElementById('aiseo-link-opportunities-body');
+		const refreshBtn = document.getElementById('aiseo-refresh-link-opportunities');
+		const selectAllBtn = document.getElementById('aiseo-links-select-all-posts');
+		const bulkApplyBtn = document.getElementById('aiseo-bulk-apply-links');
+		const bulkSummary = document.getElementById('aiseo-links-bulk-summary');
+		const reviewPanel = document.getElementById('aiseo-links-review-panel');
+		const reviewEmpty = document.getElementById('aiseo-links-review-empty');
+		const reviewTitle = document.getElementById('aiseo-review-title');
+		const reviewMeta = document.getElementById('aiseo-review-meta');
+		const reviewAnchorSummary = document.getElementById('aiseo-review-anchor-summary');
+		const reviewBody = document.getElementById('aiseo-review-suggestions-body');
+		const reviewApplyBtn = document.getElementById('aiseo-apply-review-links');
+		const reviewEditLink = document.getElementById('aiseo-review-edit-link');
+		const reviewCheckAll = document.getElementById('aiseo-review-check-all');
+		const masterCheckbox = document.getElementById('aiseo-links-check-all');
+		const selectionCount = document.getElementById('aiseo-links-selection-count');
+		const statMissing = document.querySelector('#aiseo-links-stat-missing .aiseo-stat-card__value');
+		const statSuggestions = document.querySelector('#aiseo-links-stat-suggestions .aiseo-stat-card__value');
+		const statSelected = document.querySelector('#aiseo-links-stat-selected .aiseo-stat-card__value');
+
+		if (!listBody) return;
+
+		let opportunities = [];
+		let selectedPostIds = new Set();
+		let activePost = null;
+
+		function updateSelectedStats() {
+			const selectedCount = selectedPostIds.size;
+			if (selectionCount) selectionCount.textContent = String(selectedCount);
+			if (statSelected) {
+				statSelected.textContent = String(selectedCount);
+				statSelected.setAttribute('data-counter-target', String(selectedCount));
+			}
+			if (masterCheckbox) {
+				masterCheckbox.checked = opportunities.length > 0 && selectedCount === opportunities.length;
+			}
+		}
+
+		function renderReviewSuggestions(suggestions) {
+			if (!reviewBody) return;
+			reviewBody.innerHTML = '';
+			if (!suggestions.length) {
+				reviewBody.innerHTML = '<tr><td colspan="5" class="aiseo-empty">Uygulanabilir oneri bulunamadi.</td></tr>';
+				return;
+			}
+
+			suggestions.forEach((item) => {
+				const row = document.createElement('tr');
+				const score = Math.round((item.similarity_score || 0) * 100);
+				row.innerHTML =
+					'<td><input type="checkbox" class="aiseo-review-link-select" value="' + escapeHtml(item.id || '') + '" checked></td>' +
+					'<td><a href="' + escapeHtml(item.target_url || '') + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(item.target_title || '') + '</a></td>' +
+					'<td>' + escapeHtml(item.anchor_text || '') + '</td>' +
+					'<td class="aiseo-row-meta">' + escapeHtml(item.context_snippet || '-') + '</td>' +
+					'<td>' + scoreBadge(score) + '</td>';
+				reviewBody.appendChild(row);
+			});
+		}
+
+		function openReview(postId) {
+			activePost = opportunities.find((item) => parseInt(item.post_id, 10) === parseInt(postId, 10)) || null;
+			if (!activePost) return;
+
+			if (reviewEmpty) reviewEmpty.style.display = 'none';
+			if (reviewPanel) reviewPanel.style.display = '';
+			if (reviewTitle) reviewTitle.textContent = activePost.title || '-';
+			if (reviewMeta) reviewMeta.textContent = (activePost.categories || '-') + ' / ' + String(activePost.word_count || 0) + ' kelime';
+			if (reviewAnchorSummary) reviewAnchorSummary.textContent = activePost.anchor_summary || 'Anchor ozeti bulunamadi.';
+			if (reviewEditLink) reviewEditLink.href = activePost.edit_url || '#';
+			if (reviewCheckAll) reviewCheckAll.checked = true;
+			renderReviewSuggestions(activePost.suggestions || []);
+		}
+
+		function renderOpportunities() {
+			listBody.innerHTML = '';
+			if (!opportunities.length) {
+				listBody.innerHTML = '<tr><td colspan="7" class="aiseo-empty">Ic linki eksik yazi bulunmadi.</td></tr>';
+				updateSelectedStats();
+				return;
+			}
+
+			opportunities.forEach((post) => {
+				const row = document.createElement('tr');
+				const postId = parseInt(post.post_id || 0, 10);
+				const score = Math.round((post.top_similarity_score || 0) * 100);
+				row.dataset.postId = String(postId);
+				row.innerHTML =
+					'<td><input type="checkbox" class="aiseo-link-post-select" value="' + escapeHtml(postId) + '"' + (selectedPostIds.has(postId) ? ' checked' : '') + '></td>' +
+					'<td><div class="aiseo-table-title"><a href="' + escapeHtml(post.edit_url || '#') + '">' + escapeHtml(post.title || '') + '</a><small>' + escapeHtml(post.anchor_summary || 'Anchor bekleniyor') + '</small></div></td>' +
+					'<td>' + escapeHtml(post.categories || '-') + '</td>' +
+					'<td>' + escapeHtml(post.word_count || 0) + '</td>' +
+					'<td>' + escapeHtml(post.suggestion_count || 0) + '</td>' +
+					'<td>' + scoreBadge(score) + '</td>' +
+					'<td><div class="aiseo-row-actions"><button type="button" class="button button-secondary button-small aiseo-link-review" data-post-id="' + escapeHtml(postId) + '">Incele</button><button type="button" class="button button-primary button-small aiseo-link-apply-one" data-post-id="' + escapeHtml(postId) + '">Hemen Uygula</button></div></td>';
+				listBody.appendChild(row);
+			});
+
+			updateSelectedStats();
+		}
+
+		function renderBulkSummary(payload) {
+			if (!bulkSummary) return;
+			const summary = payload?.summary || null;
+			const results = Array.isArray(payload?.results) ? payload.results : [];
+			if (!summary) {
+				bulkSummary.innerHTML = '<p class="aiseo-row-meta">Henuz toplu uygulama calistirilmadi.</p>';
+				return;
+			}
+
+			const items = results.map((item) => {
+				const tone = item.success ? (item.changed ? 'success' : 'warning') : 'danger';
+				return '<li><span class="aiseo-status-pill aiseo-status-pill--' + tone + '">' + escapeHtml(item.title || ('#' + item.post_id)) + '</span> ' + escapeHtml(item.message || '') + '</li>';
+			}).join('');
+
+			bulkSummary.innerHTML =
+				'<div class="aiseo-check-grid">' +
+					'<div class="aiseo-info-card"><strong>' + escapeHtml(summary.applied || 0) + '</strong><span class="aiseo-row-meta">uygulandi</span></div>' +
+					'<div class="aiseo-info-card"><strong>' + escapeHtml(summary.unchanged || 0) + '</strong><span class="aiseo-row-meta">degismedi</span></div>' +
+					'<div class="aiseo-info-card"><strong>' + escapeHtml(summary.failed || 0) + '</strong><span class="aiseo-row-meta">atlandi/hata</span></div>' +
+				'</div>' +
+				(items ? '<ul class="aiseo-links-bulk-results">' + items + '</ul>' : '');
+		}
+
+		async function loadOpportunities(buttonEl) {
+			if (buttonEl) UI.loading(buttonEl, true);
+			listBody.innerHTML = '<tr><td colspan="7" class="aiseo-empty">Yazilar taraniyor...</td></tr>';
+			try {
+				const res = await API.getLinkOpportunities();
+				opportunities = Array.isArray(res.data?.posts) ? res.data.posts : [];
+				const stats = res.data?.stats || {};
+				if (statMissing) {
+					statMissing.textContent = String(stats.missing_posts || opportunities.length || 0);
+					statMissing.setAttribute('data-counter-target', String(stats.missing_posts || opportunities.length || 0));
+				}
+				if (statSuggestions) {
+					statSuggestions.textContent = String(stats.total_suggestions || 0);
+					statSuggestions.setAttribute('data-counter-target', String(stats.total_suggestions || 0));
+				}
+				selectedPostIds = new Set(Array.from(selectedPostIds).filter((id) => opportunities.some((item) => parseInt(item.post_id, 10) === id)));
+				renderOpportunities();
+				if (activePost) openReview(activePost.post_id);
+			} catch (e) {
+				listBody.innerHTML = '<tr><td colspan="7" class="aiseo-empty">' + escapeHtml(e.message || i18n.error) + '</td></tr>';
+			} finally {
+				if (buttonEl) UI.loading(buttonEl, false);
+			}
+		}
+
+		async function applyOnePost(postId, buttonEl) {
+			UI.loading(buttonEl, true);
+			try {
+				const res = await API.bulkApplyLinks([postId], 3);
+				const result = res.data?.results?.[0] || null;
+				renderBulkSummary(res.data || {});
+				if (!result?.success || !result?.changed) {
+					UI.notice('aiseo-links-notice', result?.message || 'Bu yaziya uygulanacak degisiklik bulunamadi.', result?.success ? 'warning' : 'error');
+					return;
+				}
+				UI.notice('aiseo-links-notice', result.message || 'Ic linkler yaziya uygulandi.', 'success');
+				await loadOpportunities();
+			} catch (e) {
+				UI.notice('aiseo-links-notice', e.message || i18n.error, 'error');
+			} finally {
+				UI.loading(buttonEl, false);
+			}
+		}
+
+		if (refreshBtn) {
+			refreshBtn.addEventListener('click', () => loadOpportunities(refreshBtn));
+		}
+
+		if (selectAllBtn) {
+			selectAllBtn.addEventListener('click', () => {
+				const shouldSelectAll = selectedPostIds.size !== opportunities.length;
+				selectedPostIds = shouldSelectAll ? new Set(opportunities.map((item) => parseInt(item.post_id, 10))) : new Set();
+				renderOpportunities();
+			});
+		}
+
+		if (masterCheckbox) {
+			masterCheckbox.addEventListener('change', () => {
+				selectedPostIds = masterCheckbox.checked ? new Set(opportunities.map((item) => parseInt(item.post_id, 10))) : new Set();
+				renderOpportunities();
+			});
+		}
+
+		if (reviewCheckAll) {
+			reviewCheckAll.addEventListener('change', () => {
+				document.querySelectorAll('.aiseo-review-link-select').forEach((input) => {
+					input.checked = reviewCheckAll.checked;
+				});
+			});
+		}
+
+		if (reviewApplyBtn) {
+			reviewApplyBtn.addEventListener('click', async () => {
+				if (!activePost) {
+					UI.notice('aiseo-links-notice', 'Once bir yazi secin.', 'warning');
+					return;
+				}
+
+				const selectedIds = Array.from(document.querySelectorAll('.aiseo-review-link-select:checked'))
+					.map((input) => parseInt(input.value, 10))
+					.filter((id) => Number.isFinite(id) && id > 0);
+
+				if (!selectedIds.length) {
+					UI.notice('aiseo-links-notice', 'En az bir oneri secin.', 'warning');
+					return;
+				}
+
+				UI.loading(reviewApplyBtn, true);
+				try {
+					const res = await API.applyLinks(activePost.post_id, selectedIds, null, true);
+					const data = res.data || {};
+					if (!data.auto_saved) {
+						UI.notice('aiseo-links-notice', 'Secili oneriler hesaplandi ancak yazida degisiklik olusmadi.', 'warning');
+						return;
+					}
+					UI.notice('aiseo-links-notice', 'Ic linkler secili yaziya uygulandi.', 'success');
+					await loadOpportunities();
+				} catch (e) {
+					UI.notice('aiseo-links-notice', e.message || i18n.error, 'error');
+				} finally {
+					UI.loading(reviewApplyBtn, false);
+				}
+			});
+		}
+
+		if (bulkApplyBtn) {
+			bulkApplyBtn.addEventListener('click', async () => {
+				const postIds = Array.from(selectedPostIds);
+				if (!postIds.length) {
+					UI.notice('aiseo-links-notice', 'Toplu uygulama icin once en az bir yazi secin.', 'warning');
+					return;
+				}
+				if (!confirm('Secilen yazilara otomatik yayin mantigiyla ic link uygulansin mi? Her yazi otomatik kaydedilecektir.')) return;
+
+				UI.loading(bulkApplyBtn, true);
+				try {
+					const res = await API.bulkApplyLinks(postIds, 3);
+					renderBulkSummary(res.data || {});
+					const summary = res.data?.summary || {};
+					UI.notice('aiseo-links-notice', 'Toplu islem tamamlandi. Uygulanan: ' + (summary.applied || 0) + ', degismeyen: ' + (summary.unchanged || 0) + ', hata: ' + (summary.failed || 0) + '.', 'success');
+					selectedPostIds = new Set();
+					await loadOpportunities();
+				} catch (e) {
+					UI.notice('aiseo-links-notice', e.message || i18n.error, 'error');
+				} finally {
+					UI.loading(bulkApplyBtn, false);
+				}
+			});
+		}
+
+		document.addEventListener('change', (event) => {
+			const input = event.target instanceof Element ? event.target.closest('.aiseo-link-post-select') : null;
+			if (!input) return;
+			const postId = parseInt(input.value, 10);
+			if (!Number.isFinite(postId) || postId < 1) return;
+			if (input.checked) selectedPostIds.add(postId);
+			else selectedPostIds.delete(postId);
+			updateSelectedStats();
+		});
+
+		document.addEventListener('click', async (event) => {
+			const reviewBtn = event.target instanceof Element ? event.target.closest('.aiseo-link-review') : null;
+			if (reviewBtn) {
+				event.preventDefault();
+				openReview(reviewBtn.dataset.postId);
+				return;
+			}
+
+			const applyBtn = event.target instanceof Element ? event.target.closest('.aiseo-link-apply-one') : null;
+			if (applyBtn) {
+				event.preventDefault();
+				const postId = parseInt(applyBtn.dataset.postId, 10);
+				if (!Number.isFinite(postId) || postId < 1) return;
+				await applyOnePost(postId, applyBtn);
+			}
+		});
+
+		loadOpportunities();
 	}
 
 	function initPendingLinkContent() {
@@ -2663,7 +2952,7 @@
 			initArticleGenerator();
 		}
 		if (page === 'aiseo-links') {
-			initInternalLinks();
+			initInternalLinksModern();
 		}
 		if (page === 'aiseo-auto-publisher') {
 			initAutoPublisherEnhanced();

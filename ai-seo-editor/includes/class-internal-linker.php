@@ -140,6 +140,33 @@ class AISEO_Internal_Linker {
 		return $items;
 	}
 
+	public function get_linkless_opportunities( int $limit = 100, int $suggestion_limit = 3 ): array {
+		$items = $this->find_posts_without_internal_links( $limit );
+		if ( empty( $items ) ) {
+			return [];
+		}
+
+		$opportunities = [];
+		foreach ( $items as $item ) {
+			$post_id = absint( $item['post_id'] ?? 0 );
+			if ( $post_id < 1 ) {
+				continue;
+			}
+
+			$suggestions     = $this->find_suggestions( $post_id );
+			$top_suggestions = array_slice( is_array( $suggestions ) ? $suggestions : [], 0, max( 1, $suggestion_limit ) );
+
+			$item['suggestions']         = $top_suggestions;
+			$item['suggestion_ids']      = $this->extract_suggestion_ids( $top_suggestions );
+			$item['suggestion_count']    = count( $top_suggestions );
+			$item['top_similarity_score'] = ! empty( $top_suggestions[0]['similarity_score'] ) ? (float) $top_suggestions[0]['similarity_score'] : 0.0;
+			$item['anchor_summary']      = $this->build_anchor_summary( $top_suggestions );
+			$opportunities[]             = $item;
+		}
+
+		return $opportunities;
+	}
+
 	public function apply_suggestions( int $post_id, array $suggestion_ids, ?string $source_content = null ): string {
 		if ( empty( $suggestion_ids ) ) {
 			return '';
@@ -223,6 +250,21 @@ class AISEO_Internal_Linker {
 		return aiseo_preserve_bracket_blocks( $source_content ?? $post->post_content, $content );
 	}
 
+	public function extract_suggestion_ids( array $suggestions, int $limit = 0 ): array {
+		if ( $limit > 0 ) {
+			$suggestions = array_slice( $suggestions, 0, $limit );
+		}
+
+		return array_values(
+			array_filter(
+				array_map(
+					static fn( $item ) => absint( $item['id'] ?? 0 ),
+					$suggestions
+				)
+			)
+		);
+	}
+
 	private function has_internal_link( string $content ): bool {
 		if ( ! preg_match_all( '/<a\b[^>]*href=["\']([^"\']+)["\'][^>]*>/i', $content, $matches ) ) {
 			return false;
@@ -275,6 +317,27 @@ class AISEO_Internal_Linker {
 		}
 
 		return implode( ', ', $names );
+	}
+
+	private function build_anchor_summary( array $suggestions ): string {
+		if ( empty( $suggestions ) ) {
+			return '';
+		}
+
+		$anchors = array_values(
+			array_filter(
+				array_map(
+					static fn( $item ) => trim( wp_strip_all_tags( (string) ( $item['anchor_text'] ?? '' ) ) ),
+					$suggestions
+				)
+			)
+		);
+
+		if ( empty( $anchors ) ) {
+			return '';
+		}
+
+		return implode( ', ', array_slice( array_unique( $anchors ), 0, 3 ) );
 	}
 
 	private function get_anchor_variants( string $anchor, string $title ): array {
