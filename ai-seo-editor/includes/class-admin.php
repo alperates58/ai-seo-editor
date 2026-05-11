@@ -18,6 +18,7 @@ class AISEO_Admin {
 	public function init(): void {
 		add_action( 'admin_menu', [ $this, 'add_admin_menu' ] );
 		add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_assets' ] );
+		add_action( 'wp_ajax_aiseo_rebuild_round_robin_queue', [ $this, 'ajax_rebuild_round_robin_queue' ] );
 		add_action( 'add_meta_boxes', [ $this, 'add_editor_metabox' ] );
 		add_filter( 'manage_post_posts_columns', [ $this, 'add_seo_score_column' ] );
 		add_action( 'manage_post_posts_custom_column', [ $this, 'render_seo_score_column' ], 10, 2 );
@@ -249,6 +250,7 @@ class AISEO_Admin {
 			'restUrl'     => esc_url_raw( rest_url() ),
 			'nonce'       => wp_create_nonce( 'wp_rest' ),
 			'githubNonce' => wp_create_nonce( 'aiseo_github_version' ),
+			'queueRebuildNonce' => wp_create_nonce( 'aiseo_rebuild_round_robin_queue' ),
 			'postId'      => $post_id,
 			'currentPage' => $current_page,
 			'dashboardPostIds' => array_map( 'absint', $dashboard_post_ids ),
@@ -273,8 +275,36 @@ class AISEO_Admin {
 				'noApiKey'         => __( 'API anahtarı girilmemiş. Lütfen ayarları kontrol edin.', 'ai-seo-editor' ),
 				'testKeySuccess'   => __( 'API anahtarı geçerli!', 'ai-seo-editor' ),
 				'testKeyFail'      => __( 'API anahtarı geçersiz veya bağlantı hatası.', 'ai-seo-editor' ),
+				'confirmRebuildQueue' => __( 'Bu islem yazi iceriklerini silmez. Sadece otomatik yayin sirasini yeniden olusturur. Devam edilsin mi?', 'ai-seo-editor' ),
+				'rebuildingQueue'    => __( 'Akilli kuyruk yeniden olusturuluyor...', 'ai-seo-editor' ),
+				'rebuildQueueSuccess'=> __( 'Akilli kuyruk yeniden olusturuldu.', 'ai-seo-editor' ),
+				'rebuildQueueError'  => __( 'Akilli kuyruk yeniden olusturulamadi.', 'ai-seo-editor' ),
 			],
 		] );
+	}
+
+	public function ajax_rebuild_round_robin_queue(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( [ 'message' => __( 'Bu islem icin yetkiniz yok.', 'ai-seo-editor' ) ], 403 );
+		}
+
+		check_ajax_referer( 'aiseo_rebuild_round_robin_queue', 'nonce' );
+
+		try {
+			$auto_publisher = new AISEO_Auto_Publisher( $this->settings, $this->logger );
+			$report         = $auto_publisher->rebuild_round_robin_queue();
+			$queue          = $auto_publisher->get_queue( 20 );
+
+			wp_send_json_success( [
+				'report'      => $report,
+				'queue'       => $queue,
+				'queue_total' => $auto_publisher->count_queue(),
+				'cron_status' => $auto_publisher->get_cron_status(),
+				'next_post'   => $queue[0] ?? null,
+			] );
+		} catch ( Throwable $e ) {
+			wp_send_json_error( [ 'message' => $e->getMessage() ?: __( 'Akilli kuyruk islemi basarisiz oldu.', 'ai-seo-editor' ) ], 500 );
+		}
 	}
 
 	public function page_dashboard(): void {

@@ -9,6 +9,7 @@
 	const restUrl = Config.restUrl || '';
 	const nonce   = Config.nonce || '';
 	const githubNonce = Config.githubNonce || nonce;
+	const queueRebuildNonce = Config.queueRebuildNonce || '';
 
 	function initAutoPublisherEnhanced() {
 		const saveBtn = document.getElementById('aiseo-ap-save');
@@ -17,6 +18,7 @@
 		const stopCronBtn = document.getElementById('aiseo-ap-stop-cron');
 		const clearQueueBtn = document.getElementById('aiseo-ap-clear-queue-order');
 		const rebuildQueueBtn = document.getElementById('aiseo-ap-rebuild-queue');
+		const rebuildSmartQueueBtn = document.getElementById('aiseo-ap-rebuild-smart-queue');
 		const checkCronBtn = document.getElementById('aiseo-ap-check-cron-status');
 		const peekNextBtn = document.getElementById('aiseo-ap-peek-next-post');
 		const enabledEl = document.getElementById('aiseo-ap-enabled');
@@ -44,6 +46,7 @@
 		const maintenanceNextRun = document.getElementById('aiseo-ap-maintenance-next-run');
 		const maintenanceQueueCount = document.getElementById('aiseo-ap-maintenance-queue-count');
 		const maintenanceNextPost = document.getElementById('aiseo-ap-maintenance-next-post');
+		const rebuildSmartQueueResult = document.getElementById('aiseo-ap-rebuild-smart-queue-result');
 		const counterEls = document.querySelectorAll('[data-counter-target]');
 
 		initTabs();
@@ -121,6 +124,26 @@
 			});
 		}
 
+		if (rebuildSmartQueueBtn) {
+			rebuildSmartQueueBtn.addEventListener('click', async () => {
+				if (!confirm(i18n.confirmRebuildQueue || 'Bu islem yazi iceriklerini silmez. Sadece otomatik yayin sirasini yeniden olusturur. Devam edilsin mi?')) return;
+				UI.loading(rebuildSmartQueueBtn, true);
+				UI.notice('aiseo-ap-notice', i18n.rebuildingQueue || 'Akilli kuyruk yeniden olusturuluyor...', 'info');
+				try {
+					const res = await API.rebuildRoundRobinQueue();
+					const data = res.data || {};
+					renderRoundRobinResult(data.report || null);
+					if (Array.isArray(data.queue)) renderQueue(data.queue);
+					updateMaintenancePanel(data);
+					UI.notice('aiseo-ap-notice', i18n.rebuildQueueSuccess || 'Akilli kuyruk yeniden olusturuldu.', 'success');
+				} catch (e) {
+					UI.notice('aiseo-ap-notice', e.message || i18n.rebuildQueueError || i18n.error, 'error');
+				} finally {
+					UI.loading(rebuildSmartQueueBtn, false);
+				}
+			});
+		}
+
 		if (checkCronBtn) {
 			checkCronBtn.addEventListener('click', async () => {
 				await runMaintenanceAction(checkCronBtn, 'cron_status');
@@ -138,6 +161,7 @@
 		function updateNextRunText(nextRun) { if (nextRunText) nextRunText.textContent = nextRun ? 'Sonraki calisma: ' + nextRun : 'Henuz zamanlanmamis.'; }
 		function updateMaintenancePanel(data) { const cronStatus = data.cron_status || {}; const nextRun = typeof cronStatus.next_run === 'string' && cronStatus.next_run ? cronStatus.next_run : (data.next_run || 'Planli cron yok.'); const queueTotal = Number.isFinite(parseInt(data.queue_total ?? data.total ?? 0, 10)) ? Math.max(0, parseInt(data.queue_total ?? data.total ?? 0, 10)) : 0; const nextPost = data.next_post || null; if (maintenanceCronStatus) maintenanceCronStatus.textContent = cronStatus.is_scheduled ? 'Aktif' : 'Cron kapali'; if (maintenanceNextRun) maintenanceNextRun.textContent = nextRun; if (maintenanceQueueCount) maintenanceQueueCount.textContent = String(queueTotal); if (maintenanceNextPost) maintenanceNextPost.textContent = nextPost && nextPost.id ? '#' + nextPost.id + ' - ' + (nextPost.title || 'Basliksiz taslak') : 'Kuyrukta bekleyen yazi yok.'; updateNextRunText(cronStatus.next_run || data.next_run || null); updateQueueKpi(queueTotal); }
 		async function runMaintenanceAction(buttonEl, action, extraBody, shouldRefreshQueue) { UI.loading(buttonEl, true); try { const res = await API.maintainAutoPublisher(Object.assign({ action: action }, extraBody || {})); const data = res.data || {}; updateMaintenancePanel(data); if (Array.isArray(data.queue)) renderQueue(data.queue); else if (shouldRefreshQueue) { const queueRes = await API.getAutoPublisherQueue(); renderQueue(queueRes.data?.queue || []); updateMaintenancePanel(queueRes.data || {}); } UI.notice('aiseo-ap-notice', res.message || 'Islem tamamlandi.', 'success'); } catch (e) { UI.notice('aiseo-ap-notice', e.message || i18n.error, 'error'); } finally { UI.loading(buttonEl, false); } }
+		function renderRoundRobinResult(report) { if (!rebuildSmartQueueResult) return; if (!report) { rebuildSmartQueueResult.innerHTML = ''; return; } const nextTitle = report.next_post_title ? ('#' + escapeHtml(report.next_post_id || 0) + ' - ' + escapeHtml(report.next_post_title)) : 'Kuyrukta bekleyen yazi yok.'; const backupPath = report.backup_path ? escapeHtml(report.backup_path) : '--'; rebuildSmartQueueResult.innerHTML = '<div class="aiseo-ap-rebuild-report"><h3>Akilli kuyruk yeniden olusturuldu.</h3><div class="aiseo-ap-rebuild-report__grid"><div><strong>' + escapeHtml(report.updated_count || 0) + '</strong><span>Guncellenen taslak</span></div><div><strong>' + escapeHtml(report.total_drafts || 0) + '</strong><span>Toplam taslak</span></div><div><strong>' + escapeHtml(report.bucket_count || 0) + '</strong><span>Alt kategori/bucket</span></div><div><strong>' + escapeHtml(report.first_160_unique_child_count || 0) + '</strong><span>Ilk 160 benzersiz alt kategori</span></div><div><strong>' + escapeHtml(report.first_160_adjacent_duplicate_count || 0) + '</strong><span>Ardisik tekrar</span></div></div><p><strong>Siradaki yazi:</strong> ' + nextTitle + '</p><p><strong>Yedek dosyasi:</strong> ' + backupPath + '</p></div>'; }
 		function initTabs() { document.querySelectorAll('.aiseo-ap-tab').forEach((tab) => { tab.addEventListener('click', () => { const key = tab.dataset.apTab; document.querySelectorAll('.aiseo-ap-tab').forEach((item) => { const active = item === tab; item.classList.toggle('is-active', active); item.setAttribute('aria-selected', active ? 'true' : 'false'); }); document.querySelectorAll('.aiseo-ap-tab-panel').forEach((panel) => { const active = panel.dataset.apPanel === key; panel.classList.toggle('is-active', active); panel.hidden = !active; }); }); }); }
 		function initCategoryPicker() { if (!categorySelect || !categoryOptions || !categoryChips) return; categoryOptions.querySelectorAll('.aiseo-ap-category-option').forEach((btn) => { btn.addEventListener('click', () => toggleCategory(parseInt(btn.dataset.termId, 10))); }); if (categorySearch) { categorySearch.addEventListener('input', () => { const query = String(categorySearch.value || '').trim().toLowerCase(); categoryOptions.querySelectorAll('.aiseo-ap-category-option').forEach((btn) => { const name = String(btn.dataset.termName || '').toLowerCase(); btn.hidden = query ? !name.includes(query) : false; }); }); } if (clearCategoriesBtn) { clearCategoriesBtn.addEventListener('click', () => { Array.from(categorySelect.options).forEach((option) => { option.selected = false; }); renderCategorySelection(); }); } renderCategorySelection(); }
 		function toggleCategory(termId) { const option = Array.from(categorySelect.options).find((item) => parseInt(item.value, 10) === termId); if (!option) return; option.selected = !option.selected; renderCategorySelection(); }
@@ -169,6 +193,24 @@
 	/* API Module                                                           */
 	/* ------------------------------------------------------------------ */
 	const API = {
+		async ajax(action, data) {
+			const params = new URLSearchParams();
+			params.set('action', action);
+			Object.entries(data || {}).forEach(([key, value]) => {
+				params.set(key, value == null ? '' : String(value));
+			});
+
+			const res = await fetch(Config.ajaxUrl || '', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+				body: params.toString(),
+			});
+			const json = await res.json();
+			if (!res.ok || !json?.success) {
+				throw { message: json?.data?.message || json?.message || i18n.error || 'Hata olustu.' };
+			}
+			return json;
+		},
 		async request(endpoint, method, body, opts) {
 			const timeout = opts?.timeout || 0;
 			const controller = timeout && window.AbortController ? new AbortController() : null;
@@ -239,6 +281,7 @@
 		refreshAutoPublisherQueue: ()  => API.request('/auto-publisher/queue/refresh', 'POST'),
 		maintainAutoPublisher: (data)  => API.request('/auto-publisher/maintenance', 'POST', data || {}),
 		skipAutoPublisherPost: (pid, skip) => API.request('/auto-publisher/skip/' + pid, 'POST', { skip: !!skip }),
+		rebuildRoundRobinQueue: ()     => API.ajax('aiseo_rebuild_round_robin_queue', { nonce: queueRebuildNonce }),
 	};
 
 	/* ------------------------------------------------------------------ */
@@ -266,10 +309,12 @@
 			if (!btnEl) return;
 			if (on) {
 				btnEl.disabled = true;
+				btnEl.classList.add('is-loading');
 				btnEl._origText = btnEl.innerHTML;
 				btnEl.innerHTML = '<span class="aiseo-spinner"></span>';
 			} else {
 				btnEl.disabled = false;
+				btnEl.classList.remove('is-loading');
 				if (btnEl._origText) btnEl.innerHTML = btnEl._origText;
 			}
 		},

@@ -501,6 +501,16 @@ if ( empty( $activity_items ) ) {
 				</div>
 			</div>
 
+			<div class="aiseo-ap-smart-queue-callout">
+				<div class="aiseo-ap-smart-queue-callout__copy">
+					<strong><?php esc_html_e( 'Akilli Kuyrugu Yeniden Olustur', 'ai-seo-editor' ); ?></strong>
+					<p><?php esc_html_e( 'Hic yayini olmayan alt kategorilere oncelik verir ve taslaklari dengeli siraya dizer. Yazi iceriklerini silmez.', 'ai-seo-editor' ); ?></p>
+				</div>
+				<button type="button" id="aiseo-ap-rebuild-smart-queue" class="button button-primary"><?php esc_html_e( 'Akilli Kuyrugu Yeniden Olustur', 'ai-seo-editor' ); ?></button>
+			</div>
+
+			<div id="aiseo-ap-rebuild-smart-queue-result" class="aiseo-ap-smart-queue-result" aria-live="polite"></div>
+
 			<div class="aiseo-ap-actions">
 				<button type="button" id="aiseo-ap-stop-cron" class="button button-secondary"><?php esc_html_e( 'Cronu Durdur', 'ai-seo-editor' ); ?></button>
 				<button type="button" id="aiseo-ap-clear-queue-order" class="button button-secondary"><?php esc_html_e( 'Kuyrugu Temizle', 'ai-seo-editor' ); ?></button>

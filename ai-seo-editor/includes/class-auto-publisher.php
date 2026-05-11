@@ -9,6 +9,7 @@ class AISEO_Auto_Publisher {
 	private const CRON_HOOK  = 'aiseo_auto_publish_cron';
 	private const QUEUE_ORDER_META = '_aiseo_auto_publish_queue_order';
 	private const PROCESSING_TRANSIENT = 'aiseo_auto_publish_processing_post';
+	private const LAST_REPORT_OPTION = '_aiseo_last_round_robin_queue_report';
 
 	private AISEO_Settings $settings;
 	private AISEO_Logger   $logger;
@@ -187,12 +188,14 @@ class AISEO_Auto_Publisher {
 	}
 
 	private function get_next_draft( array $settings ): ?WP_Post {
+		$ordered_posts = $this->get_real_queue_posts( 1, $settings );
+		if ( ! empty( $ordered_posts ) ) {
+			return $ordered_posts[0];
+		}
+
 		$posts = $this->get_draft_posts( $settings, 50 );
 		if ( empty( $posts ) ) {
 			return null;
-		}
-		if ( $this->has_queue_order( $posts ) ) {
-			return $posts[0];
 		}
 		$queue = $this->diversify_posts_by_category( $posts, 1, $this->get_last_published_category_ids() );
 		return ! empty( $queue ) ? $queue[0] : null;
@@ -223,6 +226,63 @@ class AISEO_Auto_Publisher {
 		}
 
 		return array_slice( $posts, 0, $limit );
+	}
+
+	private function get_all_eligible_draft_posts( array $settings ): array {
+		$args = [
+			'post_type'              => 'post',
+			'post_status'            => 'draft',
+			'posts_per_page'         => -1,
+			'orderby'                => 'date',
+			'order'                  => 'ASC',
+			'meta_query'             => [
+				[
+					'key'     => '_aiseo_auto_publish_skip',
+					'compare' => 'NOT EXISTS',
+				],
+			],
+			'update_post_meta_cache' => true,
+			'update_post_term_cache' => true,
+		];
+
+		if ( ! empty( $settings['category_ids'] ) ) {
+			$args['category__in'] = $settings['category_ids'];
+		}
+
+		return get_posts( $args );
+	}
+
+	private function get_real_queue_posts( int $limit, array $settings ): array {
+		if ( $limit <= 0 ) {
+			return [];
+		}
+
+		$args = [
+			'post_type'              => 'post',
+			'post_status'            => 'draft',
+			'posts_per_page'         => $limit,
+			'orderby'                => 'meta_value_num',
+			'order'                  => 'ASC',
+			'meta_key'               => self::QUEUE_ORDER_META,
+			'meta_query'             => [
+				[
+					'key'     => '_aiseo_auto_publish_skip',
+					'compare' => 'NOT EXISTS',
+				],
+				[
+					'key'     => self::QUEUE_ORDER_META,
+					'compare' => 'EXISTS',
+				],
+			],
+			'update_post_meta_cache' => true,
+			'update_post_term_cache' => true,
+		];
+
+		if ( ! empty( $settings['category_ids'] ) ) {
+			$args['category__in'] = $settings['category_ids'];
+		}
+
+		return get_posts( $args );
 	}
 
 	public function process_post( int $post_id, ?array $settings = null ): array {
@@ -519,18 +579,24 @@ class AISEO_Auto_Publisher {
 	public function get_queue( int $limit = 10 ): array {
 		$settings = $this->get_settings();
 		$queue = [];
-		$posts = $this->get_draft_posts( $settings, max( $limit * 4, 50 ) );
-		$posts = $this->has_queue_order( $posts )
-			? array_slice( $posts, 0, $limit )
-			: $this->diversify_posts_by_category( $posts, $limit, $this->get_last_published_category_ids() );
+		$posts = $this->get_real_queue_posts( $limit, $settings );
+
+		if ( empty( $posts ) ) {
+			$posts = $this->get_draft_posts( $settings, max( $limit * 4, 50 ), false );
+			$posts = $this->diversify_posts_by_category( $posts, $limit, $this->get_last_published_category_ids() );
+		}
 
 		foreach ( $posts as $post ) {
-			$categories = get_the_category( $post->ID );
+			$context    = $this->resolve_post_queue_category_context( (int) $post->ID );
+			$categories = [ $context['bucket_name'] ];
+			if ( $context['main_category_name'] !== $context['bucket_name'] ) {
+				array_unshift( $categories, $context['main_category_name'] );
+			}
 			$queue[]    = [
 				'id'         => $post->ID,
 				'title'      => $post->post_title ?: '(Başlıksız)',
 				'date'       => $post->post_date,
-				'categories' => array_map( static fn( $c ) => $c->name, $categories ),
+				'categories' => array_values( array_unique( array_filter( $categories ) ) ),
 				'attempts'   => (int) get_post_meta( $post->ID, '_aiseo_auto_publish_attempt', true ),
 				'score_fail' => (string) get_post_meta( $post->ID, '_aiseo_auto_publish_score_fail', true ),
 				'seo_score'  => (int) get_post_meta( $post->ID, '_aiseo_seo_score', true ),
@@ -544,8 +610,7 @@ class AISEO_Auto_Publisher {
 	public function refresh_queue_order( int $limit = 200 ): array {
 		$settings           = $this->get_settings();
 		$processing_post_id = absint( get_transient( self::PROCESSING_TRANSIENT ) );
-		$order_limit        = max( 200, $limit * 4 );
-		$posts              = $this->get_draft_posts( $settings, $order_limit, false );
+		$posts              = $this->get_all_eligible_draft_posts( $settings );
 		$posts_to_sort      = [];
 
 		foreach ( $posts as $post ) {
@@ -565,6 +630,87 @@ class AISEO_Auto_Publisher {
 		}
 
 		return $this->get_queue( min( 50, max( 1, $limit ) ) );
+	}
+
+	public function rebuild_round_robin_queue(): array {
+		$settings           = $this->get_settings();
+		$processing_post_id = absint( get_transient( self::PROCESSING_TRANSIENT ) );
+		$draft_posts        = $this->get_all_eligible_draft_posts( $settings );
+		$eligible_posts     = [];
+
+		foreach ( $draft_posts as $post ) {
+			if ( ! $post instanceof WP_Post ) {
+				continue;
+			}
+
+			if ( $processing_post_id > 0 && $processing_post_id === (int) $post->ID ) {
+				continue;
+			}
+
+			$eligible_posts[] = $post;
+		}
+
+		$total_drafts = count( $eligible_posts );
+		$backup_path  = $this->backup_queue_order_to_csv( $eligible_posts );
+
+		if ( 0 === $total_drafts ) {
+			$empty_report = [
+				'updated_count'                      => 0,
+				'total_drafts'                       => 0,
+				'bucket_count'                       => 0,
+				'first_20_items'                     => [],
+				'first_160_unique_child_count'       => 0,
+				'first_160_adjacent_duplicate_count' => 0,
+				'backup_path'                        => $backup_path,
+				'next_post_id'                       => 0,
+				'next_post_title'                    => '',
+				'report_saved'                       => false,
+			];
+			$empty_report['report_saved'] = update_option( self::LAST_REPORT_OPTION, $empty_report, false );
+
+			return $empty_report;
+		}
+
+		$buckets         = $this->build_round_robin_buckets( $eligible_posts );
+		$ordered_entries = $this->build_round_robin_entries( $buckets );
+		$applied_at      = current_time( 'mysql' );
+		$base            = time();
+		$step            = 2;
+		$updated_count   = 0;
+		$first_20_items  = [];
+
+		foreach ( $ordered_entries as $index => $entry ) {
+			$post_id     = (int) $entry['post']->ID;
+			$queue_order = $base + ( $index * $step );
+
+			update_post_meta( $post_id, self::QUEUE_ORDER_META, $queue_order );
+			update_post_meta( $post_id, '_aiseo_queue_round_robin_applied', $applied_at );
+			update_post_meta( $post_id, '_aiseo_queue_round', (int) $entry['round'] );
+			clean_post_cache( $post_id );
+			$updated_count++;
+
+			if ( $index < 20 ) {
+				$first_20_items[] = [
+					'post_id'            => $post_id,
+					'title'              => (string) $entry['post']->post_title,
+					'bucket_slug'        => (string) $entry['context']['bucket_slug'],
+					'bucket_name'        => (string) $entry['context']['bucket_name'],
+					'main_category_slug' => (string) $entry['context']['main_category_slug'],
+					'main_category_name' => (string) $entry['context']['main_category_name'],
+					'round'              => (int) $entry['round'],
+					'queue_order'        => $queue_order,
+				];
+			}
+		}
+
+		if ( function_exists( 'wp_cache_flush' ) ) {
+			wp_cache_flush();
+		}
+
+		$report = $this->build_queue_rebuild_report( $ordered_entries, $first_20_items, $updated_count, $total_drafts, $backup_path );
+		$report['report_saved'] = update_option( self::LAST_REPORT_OPTION, $report, false );
+
+		return $report;
 	}
 
 	public function clear_queue_order(): int {
@@ -675,6 +821,46 @@ class AISEO_Auto_Publisher {
 		return empty( $ancestors ) ? $category_id : (int) end( $ancestors );
 	}
 
+	public function resolve_post_queue_category_context( int $post_id ): array {
+		$category_ids = array_map( 'intval', wp_get_post_categories( $post_id ) );
+
+		if ( empty( $category_ids ) ) {
+			return [
+				'bucket_term_id'      => 0,
+				'bucket_slug'         => 'uncategorized',
+				'bucket_name'         => 'Kategorisiz',
+				'main_term_id'        => 0,
+				'main_category_slug'  => 'uncategorized',
+				'main_category_name'  => 'Kategorisiz',
+				'depth'               => 0,
+			];
+		}
+
+		usort( $category_ids, function ( int $a, int $b ) {
+			$depth_compare = $this->get_category_depth( $b ) <=> $this->get_category_depth( $a );
+			if ( 0 !== $depth_compare ) {
+				return $depth_compare;
+			}
+
+			return $a <=> $b;
+		} );
+
+		$bucket_term_id = (int) $category_ids[0];
+		$bucket_term    = get_term( $bucket_term_id, 'category' );
+		$main_term_id   = $this->get_root_category_id_for( $bucket_term_id );
+		$main_term      = $main_term_id > 0 ? get_term( $main_term_id, 'category' ) : null;
+
+		return [
+			'bucket_term_id'      => $bucket_term_id,
+			'bucket_slug'         => $bucket_term instanceof WP_Term && ! is_wp_error( $bucket_term ) ? (string) $bucket_term->slug : 'uncategorized',
+			'bucket_name'         => $bucket_term instanceof WP_Term && ! is_wp_error( $bucket_term ) ? (string) $bucket_term->name : 'Kategorisiz',
+			'main_term_id'        => $main_term_id,
+			'main_category_slug'  => $main_term instanceof WP_Term && ! is_wp_error( $main_term ) ? (string) $main_term->slug : 'uncategorized',
+			'main_category_name'  => $main_term instanceof WP_Term && ! is_wp_error( $main_term ) ? (string) $main_term->name : 'Kategorisiz',
+			'depth'               => $this->get_category_depth( $bucket_term_id ),
+		];
+	}
+
 	private function get_primary_category_id( int $post_id ): int {
 		$categories = wp_get_post_categories( $post_id );
 		if ( empty( $categories ) ) {
@@ -702,16 +888,26 @@ class AISEO_Auto_Publisher {
 	}
 
 	private function get_category_publish_counts( array $category_ids ): array {
-		$counts = [];
+		$counts = [ 0 => 0 ];
+		$terms  = get_terms( [
+			'taxonomy'   => 'category',
+			'hide_empty' => false,
+		] );
+
+		if ( is_wp_error( $terms ) ) {
+			return $counts;
+		}
+
+		foreach ( $terms as $term ) {
+			if ( $term instanceof WP_Term ) {
+				$counts[ (int) $term->term_id ] = (int) $term->count;
+			}
+		}
 
 		foreach ( array_unique( array_map( 'intval', $category_ids ) ) as $category_id ) {
-			if ( $category_id <= 0 ) {
+			if ( ! isset( $counts[ $category_id ] ) ) {
 				$counts[ $category_id ] = 0;
-				continue;
 			}
-
-			$term                 = get_term( $category_id, 'category' );
-			$counts[ $category_id ] = ( $term instanceof WP_Term && ! is_wp_error( $term ) ) ? (int) $term->count : 0;
 		}
 
 		return $counts;
@@ -833,6 +1029,216 @@ class AISEO_Auto_Publisher {
 		}
 
 		return $best_category_id;
+	}
+
+	private function build_round_robin_buckets( array $posts ): array {
+		$buckets         = [];
+		$bucket_term_ids = [];
+
+		foreach ( $posts as $post ) {
+			if ( ! $post instanceof WP_Post ) {
+				continue;
+			}
+
+			$context         = $this->resolve_post_queue_category_context( (int) $post->ID );
+			$bucket_key      = (string) $context['bucket_slug'];
+			$existing_order  = metadata_exists( 'post', $post->ID, self::QUEUE_ORDER_META ) ? (int) get_post_meta( $post->ID, self::QUEUE_ORDER_META, true ) : PHP_INT_MAX;
+			$has_queue_order = metadata_exists( 'post', $post->ID, self::QUEUE_ORDER_META );
+
+			if ( ! isset( $buckets[ $bucket_key ] ) ) {
+				$buckets[ $bucket_key ] = [
+					'key'                => $bucket_key,
+					'context'            => $context,
+					'published_count'    => 0,
+					'has_queue_order'    => false,
+					'min_existing_order' => PHP_INT_MAX,
+					'min_post_id'        => PHP_INT_MAX,
+					'posts'              => [],
+				];
+				$bucket_term_ids[] = (int) $context['bucket_term_id'];
+			}
+
+			$buckets[ $bucket_key ]['posts'][] = [
+				'post'            => $post,
+				'context'         => $context,
+				'existing_order'  => $existing_order,
+				'has_queue_order' => $has_queue_order,
+			];
+			$buckets[ $bucket_key ]['has_queue_order'] = $buckets[ $bucket_key ]['has_queue_order'] || $has_queue_order;
+			$buckets[ $bucket_key ]['min_existing_order'] = min( $buckets[ $bucket_key ]['min_existing_order'], $existing_order );
+			$buckets[ $bucket_key ]['min_post_id']        = min( $buckets[ $bucket_key ]['min_post_id'], (int) $post->ID );
+		}
+
+		$publish_counts = $this->get_category_publish_counts( $bucket_term_ids );
+
+		foreach ( $buckets as $bucket_key => $bucket ) {
+			$buckets[ $bucket_key ]['published_count'] = (int) ( $publish_counts[ (int) $bucket['context']['bucket_term_id'] ] ?? 0 );
+			usort( $buckets[ $bucket_key ]['posts'], static function ( array $a, array $b ) {
+				if ( $a['has_queue_order'] !== $b['has_queue_order'] ) {
+					return $a['has_queue_order'] ? -1 : 1;
+				}
+
+				if ( $a['existing_order'] !== $b['existing_order'] ) {
+					return $a['existing_order'] <=> $b['existing_order'];
+				}
+
+				return (int) $a['post']->ID <=> (int) $b['post']->ID;
+			} );
+		}
+
+		return $buckets;
+	}
+
+	private function build_round_robin_entries( array $buckets ): array {
+		$result          = [];
+		$round           = 1;
+		$previous_bucket = '';
+		$previous_main   = '';
+
+		while ( true ) {
+			$active_keys = array_values( array_filter(
+				array_keys( $buckets ),
+				static fn( string $bucket_key ): bool => ! empty( $buckets[ $bucket_key ]['posts'] )
+			) );
+
+			if ( empty( $active_keys ) ) {
+				break;
+			}
+
+			$round_keys = $this->sort_round_robin_bucket_keys( $active_keys, $buckets, $previous_bucket, $previous_main );
+
+			foreach ( $round_keys as $bucket_key ) {
+				if ( empty( $buckets[ $bucket_key ]['posts'] ) ) {
+					continue;
+				}
+
+				$entry            = array_shift( $buckets[ $bucket_key ]['posts'] );
+				$entry['round']   = $round;
+				$result[]         = $entry;
+				$previous_bucket  = (string) $entry['context']['bucket_slug'];
+				$previous_main    = (string) $entry['context']['main_category_slug'];
+			}
+
+			$round++;
+		}
+
+		return $result;
+	}
+
+	private function sort_round_robin_bucket_keys( array $bucket_keys, array $buckets, string $previous_bucket, string $previous_main ): array {
+		usort( $bucket_keys, static function ( string $a, string $b ) use ( $buckets, $previous_bucket, $previous_main ) {
+			$bucket_a = $buckets[ $a ];
+			$bucket_b = $buckets[ $b ];
+
+			$adjacent_a = [
+				$a === $previous_bucket ? 1 : 0,
+				(string) $bucket_a['context']['main_category_slug'] === $previous_main ? 1 : 0,
+			];
+			$adjacent_b = [
+				$b === $previous_bucket ? 1 : 0,
+				(string) $bucket_b['context']['main_category_slug'] === $previous_main ? 1 : 0,
+			];
+
+			if ( $adjacent_a !== $adjacent_b ) {
+				return $adjacent_a <=> $adjacent_b;
+			}
+
+			$score_a = [
+				(int) $bucket_a['published_count'],
+				$bucket_a['has_queue_order'] ? 0 : 1,
+				(int) $bucket_a['min_existing_order'],
+				(int) $bucket_a['min_post_id'],
+				(string) $bucket_a['key'],
+			];
+			$score_b = [
+				(int) $bucket_b['published_count'],
+				$bucket_b['has_queue_order'] ? 0 : 1,
+				(int) $bucket_b['min_existing_order'],
+				(int) $bucket_b['min_post_id'],
+				(string) $bucket_b['key'],
+			];
+
+			return $score_a <=> $score_b;
+		} );
+
+		return $bucket_keys;
+	}
+
+	private function backup_queue_order_to_csv( array $draft_posts ): string {
+		$upload_dir = wp_upload_dir();
+		$basedir    = isset( $upload_dir['basedir'] ) ? (string) $upload_dir['basedir'] : '';
+
+		if ( '' === $basedir ) {
+			return '';
+		}
+
+		$backup_dir = trailingslashit( $basedir ) . 'aiseo-backups/';
+		if ( ! wp_mkdir_p( $backup_dir ) ) {
+			return '';
+		}
+
+		$filename = sanitize_file_name( 'aiseo-queue-order-backup-' . gmdate( 'Y-m-d-His' ) . '.csv' );
+		$path     = $backup_dir . $filename;
+		$handle   = @fopen( $path, 'w' );
+
+		if ( false === $handle ) {
+			return '';
+		}
+
+		fputcsv( $handle, [ 'post_id', 'post_title', 'post_status', 'post_name', 'old_queue_order' ] );
+
+		foreach ( $draft_posts as $post ) {
+			if ( ! $post instanceof WP_Post ) {
+				continue;
+			}
+
+			fputcsv( $handle, [
+				(int) $post->ID,
+				(string) $post->post_title,
+				(string) $post->post_status,
+				(string) $post->post_name,
+				metadata_exists( 'post', $post->ID, self::QUEUE_ORDER_META ) ? (string) get_post_meta( $post->ID, self::QUEUE_ORDER_META, true ) : '',
+			] );
+		}
+
+		fclose( $handle );
+
+		return $path;
+	}
+
+	private function build_queue_rebuild_report( array $ordered_entries, array $first_20_items, int $updated_count, int $total_drafts, string $backup_path ): array {
+		$bucket_slugs                  = [];
+		$first_160_adjacent_duplicates = 0;
+		$previous_bucket               = null;
+		$first_160_bucket_slice        = [];
+
+		foreach ( $ordered_entries as $index => $entry ) {
+			$bucket_slug                = (string) $entry['context']['bucket_slug'];
+			$bucket_slugs[ $bucket_slug ] = true;
+
+			if ( $index < 160 ) {
+				$first_160_bucket_slice[] = $bucket_slug;
+				if ( $bucket_slug === $previous_bucket ) {
+					$first_160_adjacent_duplicates++;
+				}
+				$previous_bucket = $bucket_slug;
+			}
+		}
+
+		$next_entry = $ordered_entries[0] ?? null;
+
+		return [
+			'updated_count'                      => $updated_count,
+			'total_drafts'                       => $total_drafts,
+			'bucket_count'                       => count( $bucket_slugs ),
+			'first_20_items'                     => $first_20_items,
+			'first_160_unique_child_count'       => count( array_unique( $first_160_bucket_slice ) ),
+			'first_160_adjacent_duplicate_count' => $first_160_adjacent_duplicates,
+			'backup_path'                        => $backup_path,
+			'next_post_id'                       => $next_entry ? (int) $next_entry['post']->ID : 0,
+			'next_post_title'                    => $next_entry ? (string) $next_entry['post']->post_title : '',
+			'report_saved'                       => false,
+		];
 	}
 
 	private function diversify_posts_by_category( array $posts, int $limit, array $avoid_category_ids = [] ): array {
