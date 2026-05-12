@@ -146,28 +146,40 @@ class AISEO_Auto_Publisher {
 	}
 
 	public function run(): void {
-		$settings = $this->get_settings();
-		if ( ! $settings['enabled'] ) {
-			return;
-		}
-		if ( get_transient( self::PROCESSING_TRANSIENT ) ) {
+	$settings = $this->get_settings();
+	if ( ! $settings['enabled'] ) {
+		return;
+	}
+	if ( get_transient( self::PROCESSING_TRANSIENT ) ) {
+		return;
+	}
+
+	set_transient( self::PROCESSING_TRANSIENT, -1, HOUR_IN_SECONDS );
+
+	try {
+		$candidates = $this->get_cron_candidates( $settings, 10 );
+		if ( empty( $candidates ) ) {
+			$this->logger->log_ai_operation( 0, 'auto_publish_cron', 'system', 0, 0, 'success', 'Kuyrukta işlenecek taslak yok.' );
 			return;
 		}
 
-		set_transient( self::PROCESSING_TRANSIENT, -1, HOUR_IN_SECONDS );
-
-		try {
-			$post = $this->get_next_draft( $settings );
-			if ( ! $post ) {
-				$this->logger->log_ai_operation( 0, 'auto_publish_cron', 'system', 0, 0, 'success', 'Kuyrukta işlenecek taslak yok.' );
-				return;
+		foreach ( $candidates as $post ) {
+			if ( ! $post instanceof WP_Post ) {
+				continue;
 			}
 
-			$this->process_post( $post->ID, $settings );
-		} finally {
-			delete_transient( self::PROCESSING_TRANSIENT );
+			$result = $this->process_post( $post->ID, $settings );
+			if ( ! empty( $result['success'] ) ) {
+				return;
+			}
 		}
+
+		$this->logger->log_ai_operation( 0, 'auto_publish_cron', 'system', 0, 0, 'success', 'Auto publish cron: ilk 10 kuyruk adayından hiçbiri yayınlanamadı.' );
+	} finally {
+		delete_transient( self::PROCESSING_TRANSIENT );
 	}
+}
+
 
 	public function run_manual( int $post_id = 0 ): array {
 		if ( get_transient( self::PROCESSING_TRANSIENT ) ) {
@@ -199,6 +211,17 @@ class AISEO_Auto_Publisher {
 		}
 		$queue = $this->diversify_posts_by_category( $posts, 1, $this->get_last_published_category_ids() );
 		return ! empty( $queue ) ? $queue[0] : null;
+	}
+	private function get_cron_candidates( array $settings, int $limit = 10 ): array {
+		$limit = max( 1, $limit );
+
+		$ordered_posts = $this->get_real_queue_posts( $limit, $settings );
+		if ( ! empty( $ordered_posts ) ) {
+			return $ordered_posts;
+		}
+
+		$post = $this->get_next_draft( $settings );
+		return $post ? [ $post ] : [];
 	}
 
 	private function get_draft_posts( array $settings, int $limit, bool $use_queue_order = true ): array {
