@@ -67,7 +67,7 @@ class AISEO_OpenAI_Client {
 		$messages = [
 			[
 				'role'    => 'system',
-				'content' => 'Sen bir SEO baslik uzmanisin. Odak kelimeyi iceren, net ve tiklanabilir bir SEO basligi uret. Tercihen 45-55 karakter araliginda kal, 58 karakteri ASLA gecme. YALNIZCA baslik metnini dondur.',
+				'content' => 'Sen bir SEO baslik uzmanisin. Odak kelimeyi iceren, net ve tiklanabilir bir SEO basligi uret. 50-60 karakter hedefle; 58 karakteri ASLA gecme. Baslik 48 karakterin altinda kaliyorsa "Nasil Yapilir", "Hesaplama Rehberi", "Pratik Hesaplama" veya "Detayli Rehber" gibi dogal bir tamamlayici ekle — spammy veya clickbait yapma. YALNIZCA baslik metnini dondur.',
 			],
 			[
 				'role'    => 'user',
@@ -96,7 +96,7 @@ class AISEO_OpenAI_Client {
 		$messages = [
 			[
 				'role'    => 'system',
-				'content' => 'Sen Turkce SEO baslik uzmanisin. 45-60 karakter hedefiyle, odak kelimeyi dogal bicimde iceren, clickbait olmayan, net bir SEO title uret. Post titlei aynen tekrar etme. Cevapta yalnizca baslik metni veya {"seo_title":"..."} dondur.',
+				'content' => 'Sen Turkce SEO baslik uzmanisin. 50-60 karakter hedefle; 48 karakter altina dusme. Odak kelimeyi dogal bicimde iceren, clickbait olmayan, net bir SEO title uret. Baslik kisa kaliyorsa "Nasil Yapilir", "Hesaplama Rehberi", "Maliyet Analizi" veya "Pratik Hesaplama" gibi dogal bir tamamlayici kullan. Post titlei aynen tekrar etme. Cevapta yalnizca baslik metni veya {"seo_title":"..."} dondur.',
 			],
 			[
 				'role'    => 'user',
@@ -198,7 +198,7 @@ class AISEO_OpenAI_Client {
 		$response = $this->chat_completion( $messages, 2800, 0.55 );
 		return [
 			'before' => $content,
-			'after'  => $this->restore_bracket_blocks( $this->clean_model_html( $response['content'] ?? '' ), $locked['blocks'] ),
+			'after'  => $this->enforce_shortcode_placement( $content, $this->restore_bracket_blocks( $this->clean_model_html( $response['content'] ?? '' ), $locked['blocks'] ) ),
 			'field'  => 'post_content',
 		];
 	}
@@ -226,7 +226,7 @@ class AISEO_OpenAI_Client {
 		$response = $this->chat_completion( $messages, 3800, 0.55 );
 		return [
 			'before' => $content,
-			'after'  => $this->restore_bracket_blocks( $this->clean_model_html( $response['content'] ?? '' ), $locked['blocks'] ),
+			'after'  => $this->enforce_shortcode_placement( $content, $this->restore_bracket_blocks( $this->clean_model_html( $response['content'] ?? '' ), $locked['blocks'] ) ),
 			'field'  => 'post_content',
 		];
 	}
@@ -292,7 +292,7 @@ class AISEO_OpenAI_Client {
 		$response = $this->chat_completion( $messages, 3800, 0.55 );
 		return [
 			'before' => $post->post_content ?? '',
-			'after'  => $this->restore_bracket_blocks( $this->clean_model_html( $response['content'] ?? '' ), $locked['blocks'] ),
+			'after'  => $this->enforce_shortcode_placement( $post->post_content ?? '', $this->restore_bracket_blocks( $this->clean_model_html( $response['content'] ?? '' ), $locked['blocks'] ) ),
 			'field'  => 'post_content',
 		];
 	}
@@ -421,7 +421,7 @@ class AISEO_OpenAI_Client {
 		$messages = [
 			[
 				'role'    => 'system',
-				'content' => 'Sen deneyimli bir Turkce SEO editorusun. Verilen WordPress yazisini Yoast benzeri kriterlere gore kapsamli bicimde iyilestir. Cevabinda analiz, aciklama, madde madde yorum, ingilizce not veya hesaplama sureci yazma. Yalnizca su formati dondur: <article data-aiseo-output="1">...temiz WordPress HTML...</article>. SEO KURALLARI: Odak kelime ilk paragrafin ilk 100 karakterinde birebir gecmeli. En az bir H2 basliginda odak kelime birebir gecmeli. Anahtar kelime yogunlugunu %0.8-1.8 araliginda tut; ayni kelimeyi sirf skor icin tekrar etme. Konuyu oncelikle mevcut basliktan anla; odak kelime eksikse basligi konu kaynagi kabul et. Icerik 1000 kelimenin altindaysa kapsamli ama gercekci bicimde genislet, en az 2 H2 ve uygun H3 kullan. Mevcut FAQ varsa yeni FAQ ekleme; mevcut sonuc bolumu varsa ikinci sonuc bolumu ekleme. Icerik icinde <h1> veya markdown # baslik KULLANMA; icerik basliklar yalnizca H2/H3 olmali; mevcut <h1> gorursen icerige dahil etme. ' . $this->readability_instruction() . ' ' . $this->shortcode_instruction() . ' ' . $this->protected_block_instruction() . ' Mevcut gercekleri bozma, markdown fence, html/body etiketi kullanma.',
+				'content' => 'Sen deneyimli bir Turkce SEO editorusun. Verilen WordPress yazisini Yoast benzeri kriterlere gore kapsamli bicimde iyilestir. Cevabinda analiz, aciklama, madde madde yorum, ingilizce not veya hesaplama sureci yazma. Yalnizca su formati dondur: <article data-aiseo-output="1">...temiz WordPress HTML...</article>. SEO KURALLARI: Odak kelime ilk paragrafin ilk 100 karakterinde birebir gecmeli. En az bir H2 basliginda odak kelime birebir gecmeli. Anahtar kelime yogunlugunu %0.8-1.8 araliginda tut; ayni kelimeyi sirf skor icin tekrar etme. Konuyu oncelikle mevcut basliktan anla; odak kelime eksikse basligi konu kaynagi kabul et. Icerik 1000 kelimenin altindaysa en az 1000-1200 kelimeye ulasacak sekilde kapsamli ama gercekci bicimde genislet; hesaplama ornekleri, sonuc yorumlama veya sik yapilan hatalar gibi dogal bolumler ekle; en az 2 H2 ve uygun H3 kullan. Mevcut FAQ varsa yeni FAQ ekleme; mevcut sonuc bolumu varsa ikinci sonuc bolumu ekleme. Icerik icinde <h1> veya markdown # baslik KULLANMA; icerik basliklar yalnizca H2/H3 olmali; mevcut <h1> gorursen icerige dahil etme. ' . $this->readability_instruction() . ' ' . $this->shortcode_instruction() . ' ' . $this->protected_block_instruction() . ' Mevcut gercekleri bozma, markdown fence, html/body etiketi kullanma.',
 			],
 			[
 				'role'    => 'user',
@@ -454,6 +454,10 @@ class AISEO_OpenAI_Client {
 			$parsed['suggested_tags'] = $this->clean_tags( $parsed['suggested_tags'] );
 		}
 
+		if ( ! empty( $parsed['content'] ) ) {
+			$parsed['content'] = $this->enforce_shortcode_placement( $content, $parsed['content'] );
+		}
+
 		$current_seo_title = (string) get_post_meta( $post_id, '_yoast_wpseo_title', true );
 		if ( $current_seo_title === '' ) {
 			$yoast->set_seo_title( $post_id, $current['title'] );
@@ -478,7 +482,7 @@ class AISEO_OpenAI_Client {
 		$messages = [
 			[
 				'role'    => 'system',
-				'content' => 'Sen bir Turkce SEO etiket editorusun. Verilen WordPress yazisi icin temiz, odakli ve tekrar etmeyen etiket listesi uret. JSON dondur: {"tags":["..."]}. Kurallar: 5-8 etiket olsun; mevcut etiketleri otomatik koruma, yalnizca iyi olanlari tut; cok genel, tek kelimelik veya birbirini tekrar eden etiketleri ele; 2-4 kelimelik arama niyetli etiketleri tercih et; odak kelimeyi sadece dogalsa kullan; keyword stuffing yapma; hashtag, virgül ve aciklama ekleme.',
+				'content' => 'Sen bir Turkce SEO etiket editorusun. Verilen WordPress yazisi icin temiz, odakli ve tekrar etmeyen etiket listesi uret. JSON dondur: {"tags":["..."]}. Kurallar: 5-8 etiket uret. Etiketler kucuk harfle yazilsin. Kullanici arama niyetini yansitan 2-4 kelimelik ifadeler kullan: "hesaplama", "maliyet", "nasil hesaplanir", "karsilastirma", "rehber" gibi niyetli kelimeler iceren etiketler tercih et. Odak keyword varyasyonlarini dogal kullan. Tek kelimelik, cok genel, soyut veya birbirini tekrar eden etiketlerden kacin. Marka, uydurma terim veya gereksiz trend etiketi ekleme. Mevcut etiketleri otomatik koruma; sadece kaliteli olanlari tut. Hashtag, virgul ve aciklama ekleme.',
 			],
 			[
 				'role'    => 'user',
@@ -519,7 +523,7 @@ class AISEO_OpenAI_Client {
 				'role'    => 'system',
 				'content' => "Sen uzman bir SEO icerik yazarisisin. Verilen parametrelerle tam makale uret. JSON formatinda dondur:
 {\"title\":\"...\",\"meta_description\":\"...\",\"focus_keyword\":\"...\",\"content\":{\"introduction\":\"<p>...</p>\",\"sections\":[{\"heading\":\"H2 baslik\",\"content\":\"<p>...</p>\",\"subsections\":[{\"heading\":\"H3 baslik\",\"content\":\"<p>...</p>\"}]}],\"conclusion\":\"<p>...</p>\",\"faq\":[{\"question\":\"...\",\"answer\":\"...\"}]},\"word_count_estimate\":0,\"suggested_tags\":[]}
-SEO KURALLARI: meta_description 140-155 karakter arasinda olacak ve 155 karakteri ASLA gecmeyecek; odak kelime birebir (aynen) meta_description icinde gecmeli. introduction alaninin ilk 100 karakterinde odak kelime birebir gecmeli. En az bir bolum basligi (H2) odak kelimeyi birebir icermeli. Anahtar kelime yogunlugunu %0.8-1.8 araliginda tut; keyword stuffing yapma. title alani 45-60 karakter olmali; verilen basliktan farkli ama ona yakin olmali. suggested_tags alani 8-12 adet, 2-4 kelimelik, kisa olmayan SEO etiketi icermeli.{$faq_note} Icerik {$lang_str} dilinde olacak, ton: {$tone}, yaklasik {$target_wc} kelime, Google EEAT prensiplerine uygun, dogal ve okuyucu odakli. Icerik bolumlerinde <h1> veya markdown # baslik KULLANMA; WordPress sayfa H1'i tema tarafindan basilir, icerik basliklar yalnizca H2/H3 olmali. " . $this->readability_instruction() . ' ' . $this->shortcode_instruction(),
+SEO KURALLARI: meta_description 140-155 karakter arasinda olacak ve 155 karakteri ASLA gecmeyecek; odak kelime birebir (aynen) meta_description icinde gecmeli. introduction alaninin ilk 100 karakterinde odak kelime birebir gecmeli. En az bir bolum basligi (H2) odak kelimeyi birebir icermeli. Anahtar kelime yogunlugunu %0.8-1.8 araliginda tut; keyword stuffing yapma. title alani 50-60 karakter olmali; verilen basliktan farkli ama ona yakin olmali. suggested_tags alani 5-8 adet, kucuk harfle, 2-4 kelimelik, kullanici arama niyeti tasiyan SEO etiketi icermeli; marka, uydurma terim veya tek kelimelik etiket ekleme. Icerik 1000 kelimenin altina dusturme; hedef kelime sayisi 1000'den az ayarlanmis olsa bile dogal hesaplama ornekleri, sonuc yorumlama ve sik yapilan hatalar gibi bolumlerle minimum 1000 kelimeye ulastirilsin.{$faq_note} Icerik {$lang_str} dilinde olacak, ton: {$tone}, yaklasik {$target_wc} kelime, Google EEAT prensiplerine uygun, dogal ve okuyucu odakli. Icerik bolumlerinde <h1> veya markdown # baslik KULLANMA; WordPress sayfa H1'i tema tarafindan basilir, icerik basliklar yalnizca H2/H3 olmali. " . $this->readability_instruction() . ' ' . $this->shortcode_instruction(),
 			],
 			[
 				'role'    => 'user',
@@ -863,6 +867,52 @@ SEO KURALLARI: meta_description 140-155 karakter arasinda olacak ve 155 karakter
 			}
 		}
 		return false;
+	}
+
+	private function extract_hc_shortcode( string $content ): ?string {
+		if ( preg_match( '/\[hc_[^\[\]]{1,300}\]/u', $content, $match ) ) {
+			return $match[0];
+		}
+		return null;
+	}
+
+	private function remove_hc_shortcodes( string $content ): string {
+		$result = preg_replace( '/[ \t]*\[hc_[^\[\]]{1,300}\][ \t]*/u', '', $content );
+		if ( ! is_string( $result ) ) {
+			return $content;
+		}
+		$result = preg_replace( '/\n{3,}/', "\n\n", $result );
+		return trim( $result );
+	}
+
+	private function place_shortcode_after_intro( string $html, string $shortcode ): string {
+		$p_close_pos = stripos( $html, '</p>' );
+		$h2_open_pos = stripos( $html, '<h2' );
+
+		if ( $p_close_pos !== false && ( $h2_open_pos === false || $p_close_pos < $h2_open_pos ) ) {
+			return preg_replace( '/<\/p>/i', '</p>' . "\n\n" . $shortcode, $html, 1 ) ?? $html;
+		}
+
+		if ( $h2_open_pos !== false ) {
+			$before         = substr( $html, 0, $h2_open_pos );
+			$after          = substr( $html, $h2_open_pos );
+			$before_trimmed = rtrim( $before );
+			if ( $before_trimmed !== '' ) {
+				return $before_trimmed . "\n\n" . $shortcode . "\n\n" . ltrim( $after );
+			}
+			return $shortcode . "\n\n" . ltrim( $after );
+		}
+
+		return $shortcode . "\n\n" . $html;
+	}
+
+	private function enforce_shortcode_placement( string $original_content, string $ai_html ): string {
+		$original_shortcode = $this->extract_hc_shortcode( $original_content );
+		$clean_html         = $this->remove_hc_shortcodes( $ai_html );
+		if ( $original_shortcode !== null ) {
+			return $this->place_shortcode_after_intro( $clean_html, $original_shortcode );
+		}
+		return $clean_html;
 	}
 
 	private function clean_tags( array $tags ): array {
