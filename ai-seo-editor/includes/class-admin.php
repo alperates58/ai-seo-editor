@@ -427,12 +427,25 @@ class AISEO_Admin {
 
 		$query = new WP_Query( $args );
 
+		// Global score counts across ALL published posts (not just current page)
+		global $wpdb;
+		$global_green  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->posts} p INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key = '_aiseo_seo_score' WHERE p.post_type = 'post' AND p.post_status = 'publish' AND CAST(pm.meta_value AS UNSIGNED) >= 80" );
+		$global_orange = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->posts} p INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key = '_aiseo_seo_score' WHERE p.post_type = 'post' AND p.post_status = 'publish' AND CAST(pm.meta_value AS UNSIGNED) BETWEEN 60 AND 79" );
+		$global_red    = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->posts} p INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key = '_aiseo_seo_score' WHERE p.post_type = 'post' AND p.post_status = 'publish' AND CAST(pm.meta_value AS UNSIGNED) BETWEEN 1 AND 59" );
+		$global_total  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = 'post' AND post_status = 'publish'" );
+		$global_none   = max( 0, $global_total - $global_green - $global_orange - $global_red );
+
 		$this->render_template( 'bulk-analysis', [
 			'posts'                => $query->posts,
 			'total'                => $query->found_posts,
 			'paged'                => $paged,
 			'per_page'             => $per_page,
 			'current_score_filter' => $current_score_filter,
+			'global_green'         => $global_green,
+			'global_orange'        => $global_orange,
+			'global_red'           => $global_red,
+			'global_none'          => $global_none,
+			'global_total'         => $global_total,
 		] );
 	}
 

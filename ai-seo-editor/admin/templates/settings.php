@@ -105,7 +105,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 				<div class="aiseo-field-grid">
 					<div class="aiseo-field">
 						<label><?php esc_html_e( 'Maks. Token', 'ai-seo-editor' ); ?></label>
-						<input type="number" name="max_tokens" value="<?php echo esc_attr( $settings->get( 'max_tokens' ) ); ?>" min="500" max="8000" class="aiseo-input small-text">
+						<input type="number" name="max_tokens" value="<?php echo esc_attr( $settings->get( 'max_tokens' ) ); ?>" min="500" max="8000" class="aiseo-input regular-text">
 					</div>
 					<div class="aiseo-field">
 						<label><?php esc_html_e( 'Aylik Token Limiti', 'ai-seo-editor' ); ?></label>
@@ -113,7 +113,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 					</div>
 					<div class="aiseo-field">
 						<label><?php esc_html_e( 'Gunluk Islem Limiti', 'ai-seo-editor' ); ?></label>
-						<input type="number" name="daily_limit" value="<?php echo esc_attr( $settings->get( 'daily_limit' ) ); ?>" min="1" max="1000" class="aiseo-input small-text">
+						<input type="number" name="daily_limit" value="<?php echo esc_attr( $settings->get( 'daily_limit' ) ); ?>" min="1" max="1000" class="aiseo-input regular-text">
 					</div>
 				</div>
 			</section>

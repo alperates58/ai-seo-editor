@@ -37,7 +37,7 @@ class AISEO_Quality_Control {
 		$shortcode_missing = (int) $wpdb->get_var(
 			"SELECT COUNT(DISTINCT ID) FROM {$wpdb->posts}
 			WHERE post_type = 'post'
-			  AND post_status IN ('publish','draft')
+			  AND post_status = 'draft'
 			  AND post_content NOT LIKE '%[hc\_%' ESCAPE '\\\\'"
 		);
 
@@ -46,7 +46,7 @@ class AISEO_Quality_Control {
 			LEFT JOIN {$wpdb->postmeta} pm
 			  ON pm.post_id = p.ID AND pm.meta_key = '_yoast_wpseo_metadesc'
 			WHERE p.post_type = 'post'
-			  AND p.post_status IN ('publish','draft')
+			  AND p.post_status = 'publish'
 			  AND (pm.meta_value IS NULL OR pm.meta_value = '')"
 		);
 
@@ -54,7 +54,7 @@ class AISEO_Quality_Control {
 			? (int) $wpdb->get_var(
 				"SELECT COUNT(DISTINCT ID) FROM {$wpdb->posts}
 				WHERE post_type = 'post'
-				  AND post_status IN ('publish','draft')
+				  AND post_status = 'publish'
 				  AND ({$broken_like})" // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 			)
 			: 0;
@@ -66,7 +66,7 @@ class AISEO_Quality_Control {
 			  ON tt.term_taxonomy_id = tr.term_taxonomy_id AND tt.taxonomy = 'category'
 			LEFT JOIN {$wpdb->terms} t ON t.term_id = tt.term_id
 			WHERE p.post_type = 'post'
-			  AND p.post_status IN ('publish','draft')
+			  AND p.post_status = 'publish'
 			  AND (tt.parent IS NULL OR tt.parent = 0 OR tt.term_taxonomy_id IS NULL)"
 		);
 
@@ -75,7 +75,7 @@ class AISEO_Quality_Control {
 			LEFT JOIN {$wpdb->postmeta} pm
 			  ON pm.post_id = p.ID AND pm.meta_key = '_yoast_wpseo_title'
 			WHERE p.post_type = 'post'
-			  AND p.post_status IN ('publish','draft')
+			  AND p.post_status = 'publish'
 			  AND (pm.meta_value IS NULL OR pm.meta_value = '')"
 		);
 
@@ -111,7 +111,7 @@ class AISEO_Quality_Control {
 		$total = (int) $wpdb->get_var(
 			"SELECT COUNT(DISTINCT ID) FROM {$wpdb->posts}
 			WHERE post_type = 'post'
-			  AND post_status IN ('publish','draft')
+			  AND post_status = 'draft'
 			  AND post_content NOT LIKE '%[hc\_%' ESCAPE '\\\\'"
 		);
 
@@ -120,7 +120,7 @@ class AISEO_Quality_Control {
 				"SELECT p.ID, p.post_title, p.post_status, p.post_name
 				FROM {$wpdb->posts} p
 				WHERE p.post_type = 'post'
-				  AND p.post_status IN ('publish','draft')
+				  AND p.post_status = 'draft'
 				  AND p.post_content NOT LIKE '%%[hc\_%%' ESCAPE '\\\\'
 				ORDER BY p.ID DESC
 				LIMIT %d OFFSET %d",
@@ -147,7 +147,7 @@ class AISEO_Quality_Control {
 			LEFT JOIN {$wpdb->postmeta} pm
 			  ON pm.post_id = p.ID AND pm.meta_key = '_yoast_wpseo_metadesc'
 			WHERE p.post_type = 'post'
-			  AND p.post_status IN ('publish','draft')
+			  AND p.post_status = 'publish'
 			  AND (pm.meta_value IS NULL OR pm.meta_value = '')"
 		);
 
@@ -158,7 +158,7 @@ class AISEO_Quality_Control {
 				LEFT JOIN {$wpdb->postmeta} pm
 				  ON pm.post_id = p.ID AND pm.meta_key = '_yoast_wpseo_metadesc'
 				WHERE p.post_type = 'post'
-				  AND p.post_status IN ('publish','draft')
+				  AND p.post_status = 'publish'
 				  AND (pm.meta_value IS NULL OR pm.meta_value = '')
 				ORDER BY p.ID DESC
 				LIMIT %d OFFSET %d",
@@ -186,7 +186,7 @@ class AISEO_Quality_Control {
 			LEFT JOIN {$wpdb->term_taxonomy} tt
 			  ON tt.term_taxonomy_id = tr.term_taxonomy_id AND tt.taxonomy = 'category'
 			WHERE p.post_type = 'post'
-			  AND p.post_status IN ('publish','draft')
+			  AND p.post_status = 'publish'
 			  AND (tt.parent IS NULL OR tt.parent = 0 OR tt.term_taxonomy_id IS NULL)"
 		);
 
@@ -198,7 +198,7 @@ class AISEO_Quality_Control {
 				LEFT JOIN {$wpdb->term_taxonomy} tt
 				  ON tt.term_taxonomy_id = tr.term_taxonomy_id AND tt.taxonomy = 'category'
 				WHERE p.post_type = 'post'
-				  AND p.post_status IN ('publish','draft')
+				  AND p.post_status = 'publish'
 				  AND (tt.parent IS NULL OR tt.parent = 0 OR tt.term_taxonomy_id IS NULL)
 				ORDER BY p.ID DESC
 				LIMIT %d OFFSET %d",
@@ -228,7 +228,7 @@ class AISEO_Quality_Control {
 		$total = (int) $wpdb->get_var(
 			"SELECT COUNT(DISTINCT ID) FROM {$wpdb->posts}
 			WHERE post_type = 'post'
-			  AND post_status IN ('publish','draft')
+			  AND post_status = 'publish'
 			  AND ({$broken_like})" // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		);
 
@@ -237,7 +237,7 @@ class AISEO_Quality_Control {
 				"SELECT ID, post_title, post_status, post_name
 				FROM {$wpdb->posts}
 				WHERE post_type = 'post'
-				  AND post_status IN ('publish','draft')
+				  AND post_status = 'publish'
 				  AND ({$broken_like})
 				ORDER BY ID DESC
 				LIMIT %d OFFSET %d", // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
@@ -283,7 +283,7 @@ class AISEO_Quality_Control {
 		$total = (int) $wpdb->get_var(
 			"SELECT COUNT(DISTINCT ID) FROM {$wpdb->posts}
 			WHERE post_type = 'post'
-			  AND post_status IN ('publish','draft')
+			  AND post_status = 'publish'
 			  AND ({$keyword_sql})" // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		);
 
@@ -292,7 +292,7 @@ class AISEO_Quality_Control {
 				"SELECT ID, post_title, post_status, post_name
 				FROM {$wpdb->posts}
 				WHERE post_type = 'post'
-				  AND post_status IN ('publish','draft')
+				  AND post_status = 'publish'
 				  AND ({$keyword_sql})
 				ORDER BY ID DESC
 				LIMIT %d OFFSET %d", // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared

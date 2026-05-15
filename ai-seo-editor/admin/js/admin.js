@@ -256,7 +256,7 @@
 		generateArticle:  (params)     => API.request('/generate', 'POST', params),
 		createDraft:      (data)       => API.request('/generate/create-draft', 'POST', data),
 		getLinklessPosts: ()           => API.request('/links/missing?limit=50', 'GET', null, { timeout: 25000 }),
-		getLinkOpportunities: ()       => API.request('/links/opportunities?limit=25&suggestion_limit=3', 'GET', null, { timeout: 45000 }),
+		getLinkOpportunities: ()       => API.request('/links/opportunities?limit=100&suggestion_limit=3', 'GET', null, { timeout: 45000 }),
 		getLinks:         (pid)        => API.request('/links/' + pid),
 		computeLinks:     (pid)        => API.request('/links/' + pid + '/compute', 'POST'),
 		applyLinks:       (pid, ids, content, autoSave) => {

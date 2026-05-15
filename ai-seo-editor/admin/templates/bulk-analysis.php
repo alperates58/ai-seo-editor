@@ -14,25 +14,14 @@ $paged                = $paged ?? 1;
 $per_page             = $per_page ?? 50;
 $total_pages          = $per_page > 0 ? (int) ceil( $total / $per_page ) : 1;
 
+// Global counts passed from controller (all published posts, not just current page)
 $counts = [
-	'total'  => $total,
-	'green'  => 0,
-	'orange' => 0,
-	'red'    => 0,
-	'none'   => 0,
+	'total'  => $global_total  ?? $total,
+	'green'  => $global_green  ?? 0,
+	'orange' => $global_orange ?? 0,
+	'red'    => $global_red    ?? 0,
+	'none'   => $global_none   ?? 0,
 ];
-
-foreach ( $posts as $post ) {
-	$seo_score = (int) get_post_meta( $post->ID, '_aiseo_seo_score', true );
-	if ( $seo_score > 0 ) {
-		$color = aiseo_get_score_color( $seo_score );
-		if ( isset( $counts[ $color ] ) ) {
-			$counts[ $color ]++;
-		}
-	} else {
-		$counts['none']++;
-	}
-}
 ?>
 <div class="wrap aiseo-wrap aiseo-admin-shell aiseo-page-bulk">
 	<?php

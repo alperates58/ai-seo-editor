@@ -115,15 +115,15 @@ $summary_cards = [
 	<?php /* ── Sekme Açıklama Satırı ── */ ?>
 	<div class="aiseo-quality-tab-desc">
 		<?php if ( 'shortcode' === $tab ) : ?>
-			<p><?php esc_html_e( 'İçeriğinde [hc_...] shortcode bulunmayan yazılar. Her hesaplama yazısında shortcode olmalıdır.', 'ai-seo-editor' ); ?></p>
+			<p><?php esc_html_e( 'İçeriğinde [hc_...] shortcode bulunmayan TASLAK yazılar. Her hesaplama yazısında shortcode olmalıdır.', 'ai-seo-editor' ); ?> <span class="aiseo-soft-badge aiseo-soft-badge--muted"><?php esc_html_e( 'Sadece taslaklar', 'ai-seo-editor' ); ?></span></p>
 		<?php elseif ( 'meta' === $tab ) : ?>
-			<p><?php esc_html_e( 'Yoast meta description veya SEO title eksik olan yazılar.', 'ai-seo-editor' ); ?></p>
+			<p><?php esc_html_e( 'Yoast meta description eksik olan YAYINLANMIŞ yazılar.', 'ai-seo-editor' ); ?> <span class="aiseo-soft-badge aiseo-soft-badge--info"><?php esc_html_e( 'Sadece yayınlar', 'ai-seo-editor' ); ?></span></p>
 		<?php elseif ( 'category' === $tab ) : ?>
-			<p><?php esc_html_e( 'Alt kategori atanmamış (sadece ana kategoride kalan) yazılar.', 'ai-seo-editor' ); ?></p>
+			<p><?php esc_html_e( 'Alt kategori atanmamış (sadece ana kategoride kalan) YAYINLANMIŞ yazılar.', 'ai-seo-editor' ); ?> <span class="aiseo-soft-badge aiseo-soft-badge--info"><?php esc_html_e( 'Sadece yayınlar', 'ai-seo-editor' ); ?></span></p>
 		<?php elseif ( 'broken_text' === $tab ) : ?>
-			<p><?php esc_html_e( 'İçeriğinde bozuk CSS/renk artıkları bulunan yazılar: [-0.094rem], [#303030], [#8F8F8F], [9px], [#F4F4F4], [show_150ms_ease-in]', 'ai-seo-editor' ); ?></p>
+			<p><?php esc_html_e( 'İçeriğinde bozuk CSS/renk artıkları bulunan YAYINLANMIŞ yazılar: [-0.094rem], [#303030], [#8F8F8F], [9px], [#F4F4F4], [show_150ms_ease-in]', 'ai-seo-editor' ); ?> <span class="aiseo-soft-badge aiseo-soft-badge--info"><?php esc_html_e( 'Sadece yayınlar', 'ai-seo-editor' ); ?></span></p>
 		<?php elseif ( 'risk_notice' === $tab ) : ?>
-			<p><?php esc_html_e( 'Başlığında sağlık/finans anahtar kelimesi geçen yazılar — uyarı kutusu olup olmadığı manuel kontrol edilmeli.', 'ai-seo-editor' ); ?></p>
+			<p><?php esc_html_e( 'Başlığında sağlık/finans anahtar kelimesi geçen YAYINLANMIŞ yazılar — uyarı kutusu olup olmadığı manuel kontrol edilmeli.', 'ai-seo-editor' ); ?> <span class="aiseo-soft-badge aiseo-soft-badge--info"><?php esc_html_e( 'Sadece yayınlar', 'ai-seo-editor' ); ?></span></p>
 		<?php endif; ?>
 	</div>
 

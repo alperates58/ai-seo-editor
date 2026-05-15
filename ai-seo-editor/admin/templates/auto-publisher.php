@@ -155,9 +155,11 @@ $build_preview_payload = static function ( array $item, string $type = 'queue' )
 	];
 };
 
+$failed_items = [];
 foreach ( $queue as $item ) {
 	if ( ! empty( $item['score_fail'] ) ) {
 		$failed_count++;
+		$failed_items[] = $item;
 	}
 	if ( ! empty( $item['seo_score'] ) ) {
 		$score_pool[] = (int) $item['seo_score'];
@@ -308,6 +310,46 @@ if ( empty( $activity_items ) ) {
 			</div>
 		<?php endforeach; ?>
 	</div>
+
+	<?php if ( ! empty( $failed_items ) ) : ?>
+	<details class="aiseo-failed-detail" open>
+		<summary class="aiseo-failed-detail__summary">
+			<span class="dashicons dashicons-warning"></span>
+			<?php echo esc_html( sprintf( __( 'SEO eşiğini geçemeyen %d yazı — detaylar', 'ai-seo-editor' ), count( $failed_items ) ) ); ?>
+		</summary>
+		<div class="aiseo-table-shell" style="margin-top:8px">
+			<table class="aiseo-table wp-list-table widefat fixed striped">
+				<thead>
+					<tr>
+						<th><?php esc_html_e( 'Yazı', 'ai-seo-editor' ); ?></th>
+						<th style="width:100px"><?php esc_html_e( 'SEO', 'ai-seo-editor' ); ?></th>
+						<th style="width:120px"><?php esc_html_e( 'Okunabilirlik', 'ai-seo-editor' ); ?></th>
+						<th><?php esc_html_e( 'Neden Geçemedi', 'ai-seo-editor' ); ?></th>
+						<th style="width:80px"><?php esc_html_e( 'İşlem', 'ai-seo-editor' ); ?></th>
+					</tr>
+				</thead>
+				<tbody>
+					<?php foreach ( $failed_items as $fi ) : ?>
+						<tr>
+							<td>
+								<strong><?php echo esc_html( (string) ( $fi['title'] ?? '' ) ); ?></strong>
+								<br><small class="aiseo-muted">#<?php echo esc_html( (string) ( $fi['id'] ?? '' ) ); ?></small>
+							</td>
+							<td><?php echo esc_html( (string) ( $fi['seo_score'] ?? '--' ) ); ?></td>
+							<td><?php echo esc_html( (string) ( $fi['read_score'] ?? '--' ) ); ?></td>
+							<td><small><?php echo esc_html( (string) ( $fi['score_fail'] ?? '' ) ); ?></small></td>
+							<td>
+								<?php if ( ! empty( $fi['edit_url'] ) ) : ?>
+									<a href="<?php echo esc_url( $fi['edit_url'] ); ?>" class="button button-small"><?php esc_html_e( 'Düzenle', 'ai-seo-editor' ); ?></a>
+								<?php endif; ?>
+							</td>
+						</tr>
+					<?php endforeach; ?>
+				</tbody>
+			</table>
+		</div>
+	</details>
+	<?php endif; ?>
 
 	<div class="aiseo-ap-dashboard">
 		<section class="aiseo-card aiseo-ap-panel aiseo-ap-config">
