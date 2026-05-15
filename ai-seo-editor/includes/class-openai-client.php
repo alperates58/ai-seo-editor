@@ -414,6 +414,10 @@ class AISEO_OpenAI_Client {
 			'existing_tags'    => ! empty( $current_tags ) ? $current_tags : wp_get_post_tags( $post_id, [ 'fields' => 'names' ] ),
 		];
 
+		$cats      = wp_get_post_categories( $post_id, [ 'fields' => 'ids' ] );
+		$cat_label = ! empty( $cats ) ? $this->get_category_label( (int) $cats[0] ) : '';
+		$cat_note  = $cat_label !== '' ? "\nKategori: {$cat_label}" : '';
+
 		$messages = [
 			[
 				'role'    => 'system',
@@ -421,7 +425,7 @@ class AISEO_OpenAI_Client {
 			],
 			[
 				'role'    => 'user',
-				'content' => "Konu basligi: {$current['title']}\nOdak kelime: {$keyword}\nTon: {$tone}\nMevcut baslik: {$current['title']}\nMevcut meta: {$current['meta_description']}\nKelime sayisi: {$current['word_count']}\nAnahtar kelime yogunlugu: %{$current['keyword_density']}\nFAQ var mi: " . ( $current['has_faq'] ? 'evet' : 'hayir' ) . "\nSonuc bolumu var mi: " . ( $current['has_conclusion'] ? 'evet' : 'hayir' ) . "\nMevcut etiketler: " . implode( ', ', (array) $current['existing_tags'] ) . "\n\nMevcut HTML icerik:\n" . $this->limit_content_for_prompt( $locked['content'], 18000 ),
+				'content' => "Konu basligi: {$current['title']}\nOdak kelime: {$keyword}\nTon: {$tone}{$cat_note}\nMevcut baslik: {$current['title']}\nMevcut meta: {$current['meta_description']}\nKelime sayisi: {$current['word_count']}\nAnahtar kelime yogunlugu: %{$current['keyword_density']}\nFAQ var mi: " . ( $current['has_faq'] ? 'evet' : 'hayir' ) . "\nSonuc bolumu var mi: " . ( $current['has_conclusion'] ? 'evet' : 'hayir' ) . "\nMevcut etiketler: " . implode( ', ', (array) $current['existing_tags'] ) . "\n\nMevcut HTML icerik:\n" . $this->limit_content_for_prompt( $locked['content'], 18000 ),
 			],
 		];
 
@@ -507,6 +511,8 @@ class AISEO_OpenAI_Client {
 
 		$faq_note = $include_faq ? '- "faq" dizisi en az 5 soru-cevap icermeli' : '';
 		$aux_note = $aux_kw ? "\nYardimci kelimeler: {$aux_kw}" : '';
+		$cat_id   = absint( $params['category'] ?? 0 );
+		$cat_note = $cat_id > 0 ? "\nKategori: " . $this->get_category_label( $cat_id ) : '';
 
 		$messages = [
 			[
@@ -517,7 +523,7 @@ SEO KURALLARI: meta_description 140-155 karakter arasinda olacak ve 155 karakter
 			],
 			[
 				'role'    => 'user',
-				'content' => "Odak kelime: {$keyword}\nBaslik: {$title}{$aux_note}\nHedef kelime sayisi: {$target_wc}",
+				'content' => "Odak kelime: {$keyword}\nBaslik: {$title}{$cat_note}{$aux_note}\nHedef kelime sayisi: {$target_wc}",
 			],
 		];
 
@@ -612,6 +618,23 @@ SEO KURALLARI: meta_description 140-155 karakter arasinda olacak ve 155 karakter
 			'finish_reason' => $data['choices'][0]['finish_reason'] ?? '',
 			'raw_body'      => $body,
 		];
+	}
+
+	private function get_category_label( int $cat_id ): string {
+		if ( $cat_id <= 0 ) {
+			return '';
+		}
+		$cat = get_term( $cat_id, 'category' );
+		if ( ! $cat instanceof WP_Term ) {
+			return '';
+		}
+		if ( $cat->parent > 0 ) {
+			$parent = get_term( $cat->parent, 'category' );
+			if ( $parent instanceof WP_Term ) {
+				return $parent->name . ' > ' . $cat->name;
+			}
+		}
+		return $cat->name;
 	}
 
 	private function protected_block_instruction(): string {
