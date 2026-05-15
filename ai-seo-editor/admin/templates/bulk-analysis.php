@@ -4,10 +4,18 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 /** @var WP_Post[] $posts */
 /** @var string $current_score_filter */
+/** @var int $total */
+/** @var int $paged */
+/** @var int $per_page */
 
 $current_score_filter = $current_score_filter ?? '';
+$total                = $total ?? count( $posts );
+$paged                = $paged ?? 1;
+$per_page             = $per_page ?? 50;
+$total_pages          = $per_page > 0 ? (int) ceil( $total / $per_page ) : 1;
+
 $counts = [
-	'total'  => count( $posts ),
+	'total'  => $total,
 	'green'  => 0,
 	'orange' => 0,
 	'red'    => 0,
@@ -17,7 +25,10 @@ $counts = [
 foreach ( $posts as $post ) {
 	$seo_score = (int) get_post_meta( $post->ID, '_aiseo_seo_score', true );
 	if ( $seo_score > 0 ) {
-		$counts[ aiseo_get_score_color( $seo_score ) ]++;
+		$color = aiseo_get_score_color( $seo_score );
+		if ( isset( $counts[ $color ] ) ) {
+			$counts[ $color ]++;
+		}
 	} else {
 		$counts['none']++;
 	}
@@ -139,6 +150,28 @@ foreach ( $posts as $post ) {
 				</tbody>
 			</table>
 		</div>
-		<p id="aiseo-bulk-empty-state" class="aiseo-empty" style="display:none"><?php esc_html_e( 'Secili filtrelerde gosterilecek yazi bulunamadi.', 'ai-seo-editor' ); ?></p>
+		<p id="aiseo-bulk-empty-state" class="aiseo-empty" style="display:none"><?php esc_html_e( 'Seçili filtrelerde gösterilecek yazı bulunamadı.', 'ai-seo-editor' ); ?></p>
 	</section>
+
+	<?php if ( $total_pages > 1 ) : ?>
+		<div class="aiseo-pagination">
+			<?php
+			$base_url = add_query_arg( [
+				'page'         => 'aiseo-bulk',
+				'score_filter' => $current_score_filter,
+			], admin_url( 'admin.php' ) );
+
+			if ( $paged > 1 ) : ?>
+				<a href="<?php echo esc_url( add_query_arg( 'paged', $paged - 1, $base_url ) ); ?>" class="button button-secondary aiseo-pagination__btn">&laquo; <?php esc_html_e( 'Önceki', 'ai-seo-editor' ); ?></a>
+			<?php endif; ?>
+
+			<span class="aiseo-pagination__info">
+				<?php echo esc_html( sprintf( __( 'Sayfa %1$d / %2$d (%3$d yazı)', 'ai-seo-editor' ), $paged, $total_pages, $total ) ); ?>
+			</span>
+
+			<?php if ( $paged < $total_pages ) : ?>
+				<a href="<?php echo esc_url( add_query_arg( 'paged', $paged + 1, $base_url ) ); ?>" class="button button-secondary aiseo-pagination__btn"><?php esc_html_e( 'Sonraki', 'ai-seo-editor' ); ?> &raquo;</a>
+			<?php endif; ?>
+		</div>
+	<?php endif; ?>
 </div>

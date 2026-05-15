@@ -2805,23 +2805,10 @@
 		const refreshBtn = document.getElementById('aiseo-refresh-all-analyses');
 		if (!refreshBtn) return;
 
-		refreshBtn.addEventListener('click', async () => {
-			const postIds = uniqueIds(Config.dashboardPostIds || []);
-			if (!postIds.length) {
-				UI.notice('aiseo-dashboard-notice', 'Analiz edilecek yayinlanmis yazi bulunamadi.', 'warning');
-				return;
-			}
-
-			const result = await runBulkAnalyzeQueue(postIds, {
-				button: refreshBtn,
-				progressWrap: document.getElementById('aiseo-dashboard-refresh-progress'),
-				progressBar: document.getElementById('aiseo-dashboard-progress-bar'),
-				statusEl: document.getElementById('aiseo-dashboard-progress-status'),
-				statusPrefix: 'Dashboard',
-			});
-
-			UI.notice('aiseo-dashboard-notice', 'Tum analizler yenilendi. Basarili: ' + result.succeeded + ', hata: ' + result.failed + '.', result.failed ? 'warning' : 'success');
-			setTimeout(() => window.location.reload(), 1200);
+		refreshBtn.addEventListener('click', () => {
+			// Toplu analiz için İçerik Analizi sayfasına yönlendir.
+			// dashboardPostIds artık gönderilmiyor (performans — 2000+ ID JS'e gönderilmez).
+			UI.notice('aiseo-dashboard-notice', 'Toplu analiz için lütfen Toplu Analiz sayfasını kullanın.', 'info');
 		});
 	}
 
@@ -2975,6 +2962,21 @@
 	}
 
 	/* ------------------------------------------------------------------ */
+	/* Quality Control                                                      */
+	/* ------------------------------------------------------------------ */
+	function initQualityControl() {
+		// Sekme navigasyonu PHP linkleri üzerinden çalışıyor.
+		// Tablo satırlarında ek JS gerektiğinde buraya eklenebilir.
+	}
+
+	/* ------------------------------------------------------------------ */
+	/* Logs                                                                 */
+	/* ------------------------------------------------------------------ */
+	function initLogs() {
+		// Log sayfasında ekstra JS gerektiğinde buraya eklenebilir.
+	}
+
+	/* ------------------------------------------------------------------ */
 	/* Router                                                               */
 	/* ------------------------------------------------------------------ */
 	function init() {
@@ -3013,6 +3015,12 @@
 		}
 		if (page === 'aiseo-seo-title-fix') {
 			initSeoTitleFix();
+		}
+		if (page === 'aiseo-quality-control') {
+			initQualityControl();
+		}
+		if (page === 'aiseo-logs') {
+			initLogs();
 		}
 
 		// Also init optimize buttons on any page (post detail is embedded in posts page)

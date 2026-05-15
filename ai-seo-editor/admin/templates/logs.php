@@ -172,4 +172,65 @@ foreach ( (array) ( $logs['items'] ?? [] ) as $log ) {
 			<p class="aiseo-pagination-info"><?php echo esc_html( sprintf( __( 'Toplam %d kayit', 'ai-seo-editor' ), $logs['total'] ) ); ?></p>
 		</nav>
 	<?php endif; ?>
+
+	<?php /* ── Sistem Sağlık Bölümü ── */ ?>
+	<?php
+	$queue_report_logs = get_option( '_aiseo_last_round_robin_queue_report' );
+	$queue_report_logs = is_array( $queue_report_logs ) ? $queue_report_logs : [];
+
+	$auto_pub_settings = get_option( 'aiseo_auto_publisher_settings', [] );
+	$cron_hook         = 'aiseo_auto_publish_cron';
+	$next_cron         = wp_next_scheduled( $cron_hook );
+
+	$last_auto_published = get_posts( [
+		'post_type'      => 'post',
+		'post_status'    => 'publish',
+		'posts_per_page' => 1,
+		'meta_key'       => '_aiseo_auto_published',
+		'meta_value'     => '1',
+		'orderby'        => 'date',
+		'order'          => 'DESC',
+		'fields'         => 'ids',
+	] );
+	$last_auto_post_id   = ! empty( $last_auto_published ) ? (int) $last_auto_published[0] : 0;
+	$last_auto_post_date = $last_auto_post_id ? get_the_date( 'd.m.Y H:i', $last_auto_post_id ) : '--';
+	$last_auto_post_title = $last_auto_post_id ? get_the_title( $last_auto_post_id ) : '--';
+	?>
+	<section class="aiseo-panel aiseo-system-health-panel" style="margin-top:24px">
+		<div class="aiseo-panel__header">
+			<div>
+				<div class="aiseo-panel__eyebrow"><?php esc_html_e( 'Sistem Sağlığı', 'ai-seo-editor' ); ?></div>
+				<h2 class="aiseo-panel__title"><?php esc_html_e( 'Otomatik Yayın & Sistem Durumu', 'ai-seo-editor' ); ?></h2>
+			</div>
+		</div>
+		<div class="aiseo-ap-field-grid" style="gap:16px">
+			<div class="aiseo-ap-field">
+				<label><?php esc_html_e( 'Cron Durumu', 'ai-seo-editor' ); ?></label>
+				<?php if ( $next_cron ) : ?>
+					<p><?php echo wp_kses_post( aiseo_admin_status_badge( __( 'Aktif', 'ai-seo-editor' ), 'success' ) ); ?></p>
+					<small><?php echo esc_html( sprintf( __( 'Sonraki: %s', 'ai-seo-editor' ), date_i18n( 'd.m.Y H:i', $next_cron ) ) ); ?></small>
+				<?php else : ?>
+					<p><?php echo wp_kses_post( aiseo_admin_status_badge( __( 'Planlanmamış', 'ai-seo-editor' ), 'warning' ) ); ?></p>
+				<?php endif; ?>
+			</div>
+			<div class="aiseo-ap-field">
+				<label><?php esc_html_e( 'Son Otomatik Yayın', 'ai-seo-editor' ); ?></label>
+				<p><?php echo esc_html( $last_auto_post_title ); ?></p>
+				<small><?php echo esc_html( $last_auto_post_date ); ?></small>
+			</div>
+			<?php if ( ! empty( $queue_report_logs['next_post_title'] ) ) : ?>
+				<div class="aiseo-ap-field">
+					<label><?php esc_html_e( 'Son Kuyruk Rebuild', 'ai-seo-editor' ); ?></label>
+					<p><?php echo esc_html( sprintf( __( '%d yazı güncellendi', 'ai-seo-editor' ), (int) ( $queue_report_logs['updated_count'] ?? 0 ) ) ); ?></p>
+					<small><?php echo esc_html( sprintf( __( 'Sıradaki: %s', 'ai-seo-editor' ), (string) $queue_report_logs['next_post_title'] ) ); ?></small>
+				</div>
+			<?php endif; ?>
+			<?php if ( ! empty( $queue_report_logs['backup_path'] ) ) : ?>
+				<div class="aiseo-ap-field">
+					<label><?php esc_html_e( 'Son Yedek CSV', 'ai-seo-editor' ); ?></label>
+					<small style="word-break:break-all"><?php echo esc_html( (string) $queue_report_logs['backup_path'] ); ?></small>
+				</div>
+			<?php endif; ?>
+		</div>
+	</section>
 </div>

@@ -39,8 +39,8 @@ class AISEO_Admin {
 
 		add_submenu_page(
 			$this->menu_slug,
-			__( 'Dashboard', 'ai-seo-editor' ),
-			__( 'Dashboard', 'ai-seo-editor' ),
+			__( 'Genel Bakış', 'ai-seo-editor' ),
+			__( 'Genel Bakış', 'ai-seo-editor' ),
 			'manage_options',
 			$this->menu_slug,
 			[ $this, 'page_dashboard' ]
@@ -48,8 +48,8 @@ class AISEO_Admin {
 
 		add_submenu_page(
 			$this->menu_slug,
-			__( 'Yazı Analizi', 'ai-seo-editor' ),
-			__( 'Yazı Analizi', 'ai-seo-editor' ),
+			__( 'İçerik Analizi', 'ai-seo-editor' ),
+			__( 'İçerik Analizi', 'ai-seo-editor' ),
 			'manage_options',
 			'aiseo-posts',
 			[ $this, 'page_posts_analysis' ]
@@ -75,8 +75,8 @@ class AISEO_Admin {
 
 		add_submenu_page(
 			$this->menu_slug,
-			__( 'AI Makale Yaz', 'ai-seo-editor' ),
-			__( 'AI Makale Yaz', 'ai-seo-editor' ),
+			__( 'İçerik Üretimi', 'ai-seo-editor' ),
+			__( 'İçerik Üretimi', 'ai-seo-editor' ),
 			'manage_options',
 			'aiseo-generator',
 			[ $this, 'page_article_generator' ]
@@ -84,8 +84,8 @@ class AISEO_Admin {
 
 		add_submenu_page(
 			$this->menu_slug,
-			__( 'İç Link Önerileri', 'ai-seo-editor' ),
-			__( 'İç Link Önerileri', 'ai-seo-editor' ),
+			__( 'İç Linkleme', 'ai-seo-editor' ),
+			__( 'İç Linkleme', 'ai-seo-editor' ),
 			'manage_options',
 			'aiseo-links',
 			[ $this, 'page_internal_links' ]
@@ -102,11 +102,29 @@ class AISEO_Admin {
 
 		add_submenu_page(
 			$this->menu_slug,
-			__( 'SEO Başlık Düzelt', 'ai-seo-editor' ),
-			__( 'SEO Başlık Düzelt', 'ai-seo-editor' ),
+			__( 'Kalite Kontrol', 'ai-seo-editor' ),
+			__( 'Kalite Kontrol', 'ai-seo-editor' ),
+			'manage_options',
+			'aiseo-quality-control',
+			[ $this, 'page_quality_control' ]
+		);
+
+		add_submenu_page(
+			$this->menu_slug,
+			__( 'SEO Eksikleri', 'ai-seo-editor' ),
+			__( 'SEO Eksikleri', 'ai-seo-editor' ),
 			'manage_options',
 			'aiseo-seo-title-fix',
 			[ $this, 'page_seo_title_fix' ]
+		);
+
+		add_submenu_page(
+			$this->menu_slug,
+			__( 'Loglar', 'ai-seo-editor' ),
+			__( 'Loglar', 'ai-seo-editor' ),
+			'manage_options',
+			'aiseo-logs',
+			[ $this, 'page_logs' ]
 		);
 
 		add_submenu_page(
@@ -120,20 +138,11 @@ class AISEO_Admin {
 
 		add_submenu_page(
 			$this->menu_slug,
-			__( 'GitHub Güncelleme', 'ai-seo-editor' ),
-			__( 'GitHub Güncelleme', 'ai-seo-editor' ),
+			__( 'Geliştirici Araçları', 'ai-seo-editor' ),
+			__( 'Geliştirici Araçları', 'ai-seo-editor' ),
 			'manage_options',
 			'aiseo-github',
 			[ $this, 'page_github' ]
-		);
-
-		add_submenu_page(
-			$this->menu_slug,
-			__( 'Kullanım / Loglar', 'ai-seo-editor' ),
-			__( 'Kullanım / Loglar', 'ai-seo-editor' ),
-			'manage_options',
-			'aiseo-logs',
-			[ $this, 'page_logs' ]
 		);
 	}
 
@@ -202,6 +211,7 @@ class AISEO_Admin {
 			'ai-seo-editor_page_aiseo-generator',
 			'ai-seo-editor_page_aiseo-links',
 			'ai-seo-editor_page_aiseo-auto-publisher',
+			'ai-seo-editor_page_aiseo-quality-control',
 			'ai-seo-editor_page_aiseo-seo-title-fix',
 			'ai-seo-editor_page_aiseo-settings',
 			'ai-seo-editor_page_aiseo-github',
@@ -233,18 +243,6 @@ class AISEO_Admin {
 
 		$current_page = sanitize_key( $_GET['page'] ?? '' );
 		$post_id      = absint( $_GET['post'] ?? 0 );
-		$dashboard_post_ids = [];
-
-		if ( 'aiseo-dashboard' === $current_page ) {
-			$dashboard_post_ids = get_posts( [
-				'post_type'      => 'post',
-				'post_status'    => 'publish',
-				'posts_per_page' => -1,
-				'fields'         => 'ids',
-				'orderby'        => 'date',
-				'order'          => 'DESC',
-			] );
-		}
 
 		wp_localize_script( 'aiseo-admin', 'AISeoConfig', [
 			'restUrl'     => esc_url_raw( rest_url() ),
@@ -253,7 +251,6 @@ class AISEO_Admin {
 			'queueRebuildNonce' => wp_create_nonce( 'aiseo_rebuild_round_robin_queue' ),
 			'postId'      => $post_id,
 			'currentPage' => $current_page,
-			'dashboardPostIds' => array_map( 'absint', $dashboard_post_ids ),
 			'pluginUrl'   => AISEO_PLUGIN_URL,
 			'ajaxUrl'     => admin_url( 'admin-ajax.php' ),
 			'i18n'        => [
@@ -311,8 +308,35 @@ class AISEO_Admin {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'Yetkiniz yok.', 'ai-seo-editor' ) );
 		}
+
+		global $wpdb;
+
 		$stats = $this->logger->get_dashboard_stats();
-		$this->render_template( 'dashboard', [ 'stats' => $stats ] );
+
+		// Queue health — sadece scalar COUNT sorguları
+		$dash_total_drafts = (int) $wpdb->get_var(
+			"SELECT COUNT(*) FROM {$wpdb->posts}
+			WHERE post_type = 'post' AND post_status = 'draft'"
+		);
+		$dash_queued_drafts = (int) $wpdb->get_var(
+			"SELECT COUNT(DISTINCT p.ID)
+			FROM {$wpdb->posts} p
+			INNER JOIN {$wpdb->postmeta} pm
+			  ON pm.post_id = p.ID AND pm.meta_key = '_aiseo_auto_publish_queue_order'
+			WHERE p.post_type = 'post' AND p.post_status = 'draft'"
+		);
+		$dash_queue_outside  = max( 0, $dash_total_drafts - $dash_queued_drafts );
+		$dash_queue_coverage = $dash_total_drafts > 0 ? round( $dash_queued_drafts / $dash_total_drafts * 100 ) : 100;
+		$dash_queue_report   = get_option( '_aiseo_last_round_robin_queue_report' );
+
+		$this->render_template( 'dashboard', [
+			'stats'               => $stats,
+			'dash_total_drafts'   => $dash_total_drafts,
+			'dash_queued_drafts'  => $dash_queued_drafts,
+			'dash_queue_outside'  => $dash_queue_outside,
+			'dash_queue_coverage' => $dash_queue_coverage,
+			'dash_queue_report'   => $dash_queue_report,
+		] );
 	}
 
 	public function page_posts_analysis(): void {
@@ -353,23 +377,61 @@ class AISEO_Admin {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'Yetkiniz yok.', 'ai-seo-editor' ) );
 		}
+
+		$paged                = max( 1, absint( $_GET['paged'] ?? 1 ) );
+		$per_page             = 50;
 		$current_score_filter = sanitize_key( $_GET['score_filter'] ?? '' );
-		$posts = get_posts( [
+
+		$meta_query = [];
+		if ( in_array( $current_score_filter, [ 'green', 'orange', 'red' ], true ) ) {
+			$score_ranges = [
+				'green'  => [ 'min' => 80, 'max' => 100 ],
+				'orange' => [ 'min' => 60, 'max' => 79 ],
+				'red'    => [ 'min' => 1,  'max' => 59 ],
+			];
+			$range = $score_ranges[ $current_score_filter ];
+			$meta_query = [
+				[
+					'key'     => '_aiseo_seo_score',
+					'value'   => [ $range['min'], $range['max'] ],
+					'type'    => 'NUMERIC',
+					'compare' => 'BETWEEN',
+				],
+			];
+		} elseif ( 'none' === $current_score_filter ) {
+			$meta_query = [
+				'relation' => 'OR',
+				[
+					'key'     => '_aiseo_seo_score',
+					'compare' => 'NOT EXISTS',
+				],
+				[
+					'key'     => '_aiseo_seo_score',
+					'value'   => '0',
+					'compare' => '=',
+				],
+			];
+		}
+
+		$args = [
 			'post_type'      => 'post',
 			'post_status'    => 'publish',
-			'posts_per_page' => -1,
+			'posts_per_page' => $per_page,
+			'paged'          => $paged,
 			'orderby'        => 'date',
 			'order'          => 'DESC',
-		] );
-		if ( in_array( $current_score_filter, [ 'green', 'orange', 'red', 'none' ], true ) ) {
-			$posts = array_values( array_filter( $posts, function ( $post ) use ( $current_score_filter ) {
-				$seo_score = (int) get_post_meta( $post->ID, '_aiseo_seo_score', true );
-				$color     = $seo_score > 0 ? aiseo_get_score_color( $seo_score ) : 'none';
-				return $color === $current_score_filter;
-			} ) );
+		];
+		if ( $meta_query ) {
+			$args['meta_query'] = $meta_query;
 		}
+
+		$query = new WP_Query( $args );
+
 		$this->render_template( 'bulk-analysis', [
-			'posts'                => $posts,
+			'posts'                => $query->posts,
+			'total'                => $query->found_posts,
+			'paged'                => $paged,
+			'per_page'             => $per_page,
 			'current_score_filter' => $current_score_filter,
 		] );
 	}
@@ -388,15 +450,70 @@ class AISEO_Admin {
 			wp_die( esc_html__( 'Yetkiniz yok.', 'ai-seo-editor' ) );
 		}
 
-		$posts = get_posts( [
+		$paged    = max( 1, absint( $_GET['paged'] ?? 1 ) );
+		$per_page = 50;
+		$filter   = sanitize_key( $_GET['filter'] ?? '' );
+		$search   = sanitize_text_field( $_GET['s'] ?? '' );
+
+		$meta_query = [];
+		if ( 'low_seo' === $filter ) {
+			$meta_query = [
+				[
+					'key'     => '_aiseo_seo_score',
+					'value'   => [ 1, 79 ],
+					'type'    => 'NUMERIC',
+					'compare' => 'BETWEEN',
+				],
+			];
+		} elseif ( 'low_read' === $filter ) {
+			$meta_query = [
+				[
+					'key'     => '_aiseo_readability_score',
+					'value'   => [ 1, 74 ],
+					'type'    => 'NUMERIC',
+					'compare' => 'BETWEEN',
+				],
+			];
+		} elseif ( 'no_analysis' === $filter ) {
+			$meta_query = [
+				'relation' => 'OR',
+				[
+					'key'     => '_aiseo_seo_score',
+					'compare' => 'NOT EXISTS',
+				],
+				[
+					'key'     => '_aiseo_seo_score',
+					'value'   => '0',
+					'compare' => '=',
+				],
+			];
+		}
+
+		$args = [
 			'post_type'      => 'post',
 			'post_status'    => 'publish',
-			'posts_per_page' => -1,
+			'posts_per_page' => $per_page,
+			'paged'          => $paged,
 			'orderby'        => 'date',
 			'order'          => 'DESC',
-		] );
+		];
+		if ( $meta_query ) {
+			$args['meta_query'] = $meta_query;
+		}
+		if ( $search ) {
+			$args['s'] = $search;
+		}
 
-		$this->render_template( 'agent-optimizer', compact( 'posts' ) );
+		$query = new WP_Query( $args );
+
+		$this->render_template( 'agent-optimizer', [
+			'posts'    => $query->posts,
+			'total'    => $query->found_posts,
+			'paged'    => $paged,
+			'per_page' => $per_page,
+			'filter'   => $filter,
+			'search'   => $search,
+		] );
 	}
 
 	public function page_internal_links(): void {
@@ -416,6 +533,8 @@ class AISEO_Admin {
 			wp_die( esc_html__( 'Yetkiniz yok.', 'ai-seo-editor' ) );
 		}
 
+		global $wpdb;
+
 		$auto_publisher = new AISEO_Auto_Publisher( $this->settings, $this->logger );
 		$ap_settings    = $auto_publisher->get_settings();
 		$categories     = get_categories( [ 'hide_empty' => false ] );
@@ -426,7 +545,39 @@ class AISEO_Admin {
 		$cron_status    = $auto_publisher->get_cron_status();
 		$next_queue_post = $queue[0] ?? null;
 
-		$this->render_template( 'auto-publisher', compact( 'auto_publisher', 'ap_settings', 'categories', 'queue', 'total_queue_count', 'history', 'next_run', 'cron_status', 'next_queue_post' ) );
+		// Queue health — sadece scalar COUNT sorguları
+		$total_drafts = (int) $wpdb->get_var(
+			"SELECT COUNT(*) FROM {$wpdb->posts}
+			WHERE post_type = 'post' AND post_status = 'draft'"
+		);
+		$queued_drafts = (int) $wpdb->get_var(
+			"SELECT COUNT(DISTINCT p.ID)
+			FROM {$wpdb->posts} p
+			INNER JOIN {$wpdb->postmeta} pm
+			  ON pm.post_id = p.ID AND pm.meta_key = '_aiseo_auto_publish_queue_order'
+			WHERE p.post_type = 'post' AND p.post_status = 'draft'"
+		);
+		$queue_outside  = max( 0, $total_drafts - $queued_drafts );
+		$queue_coverage = $total_drafts > 0 ? round( $queued_drafts / $total_drafts * 100 ) : 100;
+		$queue_report   = get_option( '_aiseo_last_round_robin_queue_report' );
+
+		$this->render_template( 'auto-publisher', compact(
+			'auto_publisher', 'ap_settings', 'categories', 'queue',
+			'total_queue_count', 'history', 'next_run', 'cron_status', 'next_queue_post',
+			'total_drafts', 'queued_drafts', 'queue_outside', 'queue_coverage', 'queue_report'
+		) );
+	}
+
+	public function page_quality_control(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Yetkiniz yok.', 'ai-seo-editor' ) );
+		}
+		$qc      = new AISEO_Quality_Control();
+		$summary = $qc->get_summary();
+		$tab     = sanitize_key( $_GET['tab'] ?? 'shortcode' );
+		$paged   = max( 1, absint( $_GET['paged'] ?? 1 ) );
+		$items   = $qc->get_tab_data( $tab, $paged, 25 );
+		$this->render_template( 'quality-control', compact( 'summary', 'tab', 'items', 'paged' ) );
 	}
 
 	public function page_seo_title_fix(): void {

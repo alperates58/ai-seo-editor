@@ -3005,3 +3005,295 @@
 		position: static;
 	}
 }
+
+/* ============================================================
+   QUEUE HEALTH STRIP
+   ============================================================ */
+.aiseo-queue-health-strip {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px 24px;
+	align-items: center;
+	background: #f8f9fb;
+	border: 1px solid #e5e7eb;
+	border-radius: 12px;
+	padding: 14px 18px;
+	margin-bottom: 12px;
+}
+.aiseo-queue-health-strip__item {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.aiseo-queue-health-strip__item--bar {
+	flex: 1;
+	min-width: 160px;
+}
+.aiseo-queue-health-strip__item--title {
+	flex: 2;
+	min-width: 200px;
+}
+.aiseo-queue-health-strip__label {
+	font-size: 11px;
+	text-transform: uppercase;
+	letter-spacing: .4px;
+	color: #6b7280;
+	font-weight: 600;
+}
+.aiseo-queue-health-strip__value {
+	font-size: 20px;
+	font-weight: 700;
+	color: #1a1a1a;
+	line-height: 1.2;
+}
+.aiseo-queue-health-strip__value--ok  { color: #059669; }
+.aiseo-queue-health-strip__value--warn { color: #d97706; }
+
+.aiseo-queue-coverage-bar {
+	height: 8px;
+	background: #e5e7eb;
+	border-radius: 99px;
+	overflow: hidden;
+	width: 100%;
+	margin-top: 4px;
+}
+.aiseo-queue-coverage-bar__fill {
+	height: 100%;
+	border-radius: 99px;
+	transition: width .4s ease;
+}
+.aiseo-queue-coverage-bar__fill--full    { background: #059669; }
+.aiseo-queue-coverage-bar__fill--partial { background: #d97706; }
+
+/* ============================================================
+   CALLOUTS
+   ============================================================ */
+.aiseo-warning-callout {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	background: #fffbeb;
+	border: 1px solid #fcd34d;
+	border-left: 4px solid #f59e0b;
+	border-radius: 10px;
+	padding: 14px 16px;
+}
+.aiseo-warning-callout .dashicons { color: #d97706; font-size: 20px; margin-top: 2px; flex-shrink: 0; }
+.aiseo-warning-callout strong { display: block; color: #92400e; font-size: 13px; }
+.aiseo-warning-callout p { margin: 4px 0 0; color: #78350f; font-size: 12px; }
+
+.aiseo-success-callout {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	background: #ecfdf5;
+	border: 1px solid #6ee7b7;
+	border-left: 4px solid #059669;
+	border-radius: 10px;
+	padding: 12px 16px;
+	color: #065f46;
+	font-size: 13px;
+	font-weight: 600;
+}
+.aiseo-success-callout .dashicons { color: #059669; flex-shrink: 0; }
+
+/* ============================================================
+   DANGER ZONE & ACCORDION RISK
+   ============================================================ */
+.aiseo-accordion-risk {
+	border: 1px solid #fca5a5;
+	border-radius: 10px;
+	overflow: hidden;
+	margin-top: 12px;
+}
+.aiseo-accordion-risk[open] { border-color: #ef4444; }
+.aiseo-accordion-risk__summary {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 12px 16px;
+	cursor: pointer;
+	font-weight: 600;
+	font-size: 13px;
+	color: #b91c1c;
+	background: #fff5f5;
+	user-select: none;
+	list-style: none;
+}
+.aiseo-accordion-risk__summary::-webkit-details-marker { display: none; }
+.aiseo-accordion-risk__summary .dashicons { color: #ef4444; flex-shrink: 0; }
+.aiseo-accordion-risk__summary small { color: #9ca3af; font-weight: 400; margin-left: 4px; }
+.aiseo-accordion-risk[open] .aiseo-accordion-risk__summary { border-bottom: 1px solid #fca5a5; }
+
+.aiseo-danger-zone {
+	background: #fff5f5;
+	padding: 16px;
+}
+.aiseo-danger-zone__note {
+	font-size: 12px;
+	color: #6b7280;
+	margin: 0 0 12px;
+	font-style: italic;
+}
+
+.aiseo-safe-action {
+	background: #2563eb !important;
+	border-color: #1d4ed8 !important;
+	color: #fff !important;
+}
+.aiseo-safe-action:hover { background: #1d4ed8 !important; }
+
+/* ============================================================
+   QUEUE REPORT CARD
+   ============================================================ */
+.aiseo-queue-report-card {
+	background: #f8f9fb;
+	border-radius: 12px;
+	padding: 14px 18px;
+	border: 1px solid #e5e7eb;
+}
+.aiseo-queue-report-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+	gap: 10px;
+	margin-top: 8px;
+}
+.aiseo-queue-report-item {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.aiseo-queue-report-item--full {
+	grid-column: 1 / -1;
+}
+.aiseo-queue-report-item span {
+	font-size: 11px;
+	color: #6b7280;
+	text-transform: uppercase;
+	letter-spacing: .3px;
+	font-weight: 600;
+}
+.aiseo-queue-report-item strong {
+	font-size: 15px;
+	color: #1a1a1a;
+}
+.aiseo-queue-report-item small {
+	font-size: 11px;
+	color: #6b7280;
+	word-break: break-all;
+}
+
+/* ============================================================
+   QUALITY CONTROL TABS
+   ============================================================ */
+.aiseo-quality-tabs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	margin: 20px 0 0;
+	border-bottom: 2px solid #e5e7eb;
+	padding-bottom: 0;
+}
+.aiseo-quality-tab {
+	display: inline-block;
+	padding: 8px 16px;
+	font-size: 13px;
+	font-weight: 500;
+	color: #6b7280;
+	text-decoration: none;
+	border-radius: 8px 8px 0 0;
+	border: 1px solid transparent;
+	border-bottom: none;
+	margin-bottom: -2px;
+	transition: color .15s, background .15s;
+}
+.aiseo-quality-tab:hover { color: #1a1a1a; background: #f3f4f6; }
+.aiseo-quality-tab.is-active {
+	color: #2563eb;
+	background: #fff;
+	border-color: #e5e7eb;
+	border-bottom-color: #fff;
+	font-weight: 600;
+}
+
+.aiseo-quality-tab-desc {
+	font-size: 12px;
+	color: #6b7280;
+	padding: 8px 2px;
+	margin-bottom: 4px;
+}
+.aiseo-quality-tab-desc p { margin: 0; }
+
+/* ============================================================
+   PAGINATION
+   ============================================================ */
+.aiseo-pagination {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	padding: 16px 0;
+	flex-wrap: wrap;
+}
+.aiseo-pagination__btn { font-size: 13px; }
+.aiseo-pagination__info {
+	font-size: 12px;
+	color: #6b7280;
+	padding: 0 8px;
+}
+
+/* ============================================================
+   SYSTEM HEALTH PANEL
+   ============================================================ */
+.aiseo-system-health-panel .aiseo-ap-field-grid {
+	grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+}
+
+/* ============================================================
+   STAT CARD LINK VARIANT
+   ============================================================ */
+a.aiseo-stat-card--link {
+	text-decoration: none;
+	transition: transform .15s, box-shadow .15s;
+	display: flex;
+}
+a.aiseo-stat-card--link:hover {
+	transform: translateY(-2px);
+	box-shadow: 0 4px 16px rgba(0,0,0,.10);
+}
+
+/* ============================================================
+   SOFT BADGE (standalone)
+   ============================================================ */
+.aiseo-soft-badge {
+	display: inline-flex;
+	align-items: center;
+	padding: 2px 8px;
+	border-radius: 99px;
+	font-size: 11px;
+	font-weight: 600;
+}
+.aiseo-soft-badge--warn { background: #fef3c7; color: #92400e; }
+.aiseo-soft-badge--ok   { background: #ecfdf5; color: #065f46; }
+
+/* ============================================================
+   QUEUE HEALTH PANEL (dashboard)
+   ============================================================ */
+.aiseo-queue-health-panel { margin-top: 24px; }
+
+/* ============================================================
+   TABLE ACTIONS (quality-control)
+   ============================================================ */
+.aiseo-table-actions { display: flex; gap: 4px; flex-wrap: wrap; }
+.aiseo-muted { color: #9ca3af; font-size: 11px; }
+
+/* ============================================================
+   RESPONSIVE ADDITIONS
+   ============================================================ */
+@media (max-width: 782px) {
+	.aiseo-queue-health-strip { flex-direction: column; align-items: flex-start; }
+	.aiseo-queue-report-grid  { grid-template-columns: 1fr; }
+	.aiseo-quality-tabs       { gap: 2px; }
+	.aiseo-quality-tab        { font-size: 12px; padding: 6px 10px; }
+	.aiseo-pagination         { gap: 6px; }
+}

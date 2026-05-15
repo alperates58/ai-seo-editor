@@ -3,8 +3,20 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 /** @var WP_Post[] $posts */
+/** @var int $total */
+/** @var int $paged */
+/** @var int $per_page */
+/** @var string $filter */
+/** @var string $search */
 
-$total_posts = count( $posts );
+$total        = $total ?? count( $posts );
+$paged        = $paged ?? 1;
+$per_page     = $per_page ?? 50;
+$filter       = $filter ?? '';
+$search       = $search ?? '';
+$total_pages  = $per_page > 0 ? (int) ceil( $total / $per_page ) : 1;
+$total_posts  = $total;
+
 $low_candidates = 0;
 foreach ( $posts as $post ) {
 	$seo_score  = (int) get_post_meta( $post->ID, '_aiseo_seo_score', true );
@@ -113,4 +125,24 @@ foreach ( $posts as $post ) {
 			</table>
 		</div>
 	</section>
+
+	<?php if ( $total_pages > 1 ) : ?>
+		<div class="aiseo-pagination">
+			<?php
+			$base_url = add_query_arg( [
+				'page'   => 'aiseo-agent',
+				'filter' => $filter,
+				's'      => $search,
+			], admin_url( 'admin.php' ) );
+			if ( $paged > 1 ) : ?>
+				<a href="<?php echo esc_url( add_query_arg( 'paged', $paged - 1, $base_url ) ); ?>" class="button button-secondary aiseo-pagination__btn">&laquo; <?php esc_html_e( 'Önceki', 'ai-seo-editor' ); ?></a>
+			<?php endif; ?>
+			<span class="aiseo-pagination__info">
+				<?php echo esc_html( sprintf( __( 'Sayfa %1$d / %2$d (%3$d yazı)', 'ai-seo-editor' ), $paged, $total_pages, $total ) ); ?>
+			</span>
+			<?php if ( $paged < $total_pages ) : ?>
+				<a href="<?php echo esc_url( add_query_arg( 'paged', $paged + 1, $base_url ) ); ?>" class="button button-secondary aiseo-pagination__btn"><?php esc_html_e( 'Sonraki', 'ai-seo-editor' ); ?> &raquo;</a>
+			<?php endif; ?>
+		</div>
+	<?php endif; ?>
 </div>

@@ -3,6 +3,16 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 /** @var array $stats */
+/** @var int $dash_total_drafts */
+/** @var int $dash_queued_drafts */
+/** @var int $dash_queue_outside */
+/** @var int $dash_queue_coverage */
+/** @var array|false $dash_queue_report */
+$dash_total_drafts   = $dash_total_drafts ?? 0;
+$dash_queued_drafts  = $dash_queued_drafts ?? 0;
+$dash_queue_outside  = $dash_queue_outside ?? 0;
+$dash_queue_coverage = $dash_queue_coverage ?? 100;
+$dash_queue_report   = is_array( $dash_queue_report ?? false ) ? $dash_queue_report : [];
 
 $settings = AISEO_Plugin::get_instance()->get_settings();
 $needs_attention = [
@@ -188,13 +198,101 @@ $needs_attention = [
 				</div>
 			</div>
 			<div class="aiseo-quick-grid">
-				<a class="aiseo-quick-card" href="<?php echo esc_url( admin_url( 'admin.php?page=aiseo-posts' ) ); ?>"><span class="dashicons dashicons-search"></span><strong><?php esc_html_e( 'Yazi Analizi', 'ai-seo-editor' ); ?></strong><small><?php esc_html_e( 'Tekil analiz ve editor akislari', 'ai-seo-editor' ); ?></small></a>
-				<a class="aiseo-quick-card" href="<?php echo esc_url( admin_url( 'admin.php?page=aiseo-generator' ) ); ?>"><span class="dashicons dashicons-edit"></span><strong><?php esc_html_e( 'AI Makale Yaz', 'ai-seo-editor' ); ?></strong><small><?php esc_html_e( 'Yeni icerik taslagi uret', 'ai-seo-editor' ); ?></small></a>
-				<a class="aiseo-quick-card" href="<?php echo esc_url( admin_url( 'admin.php?page=aiseo-agent' ) ); ?>"><span class="dashicons dashicons-update-alt"></span><strong><?php esc_html_e( 'Otomatik Iyilestirme', 'ai-seo-editor' ); ?></strong><small><?php esc_html_e( 'AI onerileri ve uygulama akisleri', 'ai-seo-editor' ); ?></small></a>
-				<a class="aiseo-quick-card" href="<?php echo esc_url( admin_url( 'admin.php?page=aiseo-links' ) ); ?>"><span class="dashicons dashicons-admin-links"></span><strong><?php esc_html_e( 'Ic Linkler', 'ai-seo-editor' ); ?></strong><small><?php esc_html_e( 'Link firsatlarini uygula', 'ai-seo-editor' ); ?></small></a>
+				<a class="aiseo-quick-card" href="<?php echo esc_url( admin_url( 'admin.php?page=aiseo-auto-publisher' ) ); ?>"><span class="dashicons dashicons-clock"></span><strong><?php esc_html_e( 'Otomatik Yayın', 'ai-seo-editor' ); ?></strong><small><?php esc_html_e( 'Kuyruk ve yayın operasyonu', 'ai-seo-editor' ); ?></small></a>
+				<a class="aiseo-quick-card" href="<?php echo esc_url( admin_url( 'admin.php?page=aiseo-quality-control' ) ); ?>"><span class="dashicons dashicons-shield-alt"></span><strong><?php esc_html_e( 'Kalite Kontrol', 'ai-seo-editor' ); ?></strong><small><?php esc_html_e( 'Shortcode, meta ve sorun raporu', 'ai-seo-editor' ); ?></small></a>
+				<a class="aiseo-quick-card" href="<?php echo esc_url( admin_url( 'admin.php?page=aiseo-generator' ) ); ?>"><span class="dashicons dashicons-edit"></span><strong><?php esc_html_e( 'İçerik Üretimi', 'ai-seo-editor' ); ?></strong><small><?php esc_html_e( 'Yeni içerik taslağı üret', 'ai-seo-editor' ); ?></small></a>
+				<a class="aiseo-quick-card" href="<?php echo esc_url( admin_url( 'admin.php?page=aiseo-logs' ) ); ?>"><span class="dashicons dashicons-chart-line"></span><strong><?php esc_html_e( 'Loglar', 'ai-seo-editor' ); ?></strong><small><?php esc_html_e( 'AI operasyon ve sistem logları', 'ai-seo-editor' ); ?></small></a>
 			</div>
 		</div>
 	</section>
+
+	<?php if ( $dash_total_drafts > 0 ) : ?>
+	<section class="aiseo-panel aiseo-queue-health-panel">
+		<div class="aiseo-panel__header">
+			<div>
+				<div class="aiseo-panel__eyebrow"><?php esc_html_e( 'Otomatik Yayın Durumu', 'ai-seo-editor' ); ?></div>
+				<h2 class="aiseo-panel__title"><?php esc_html_e( 'Queue Coverage', 'ai-seo-editor' ); ?></h2>
+			</div>
+			<?php if ( $dash_queue_outside > 0 ) : ?>
+				<?php echo wp_kses_post( aiseo_admin_status_badge( $dash_queue_coverage . '%', 'warning' ) ); ?>
+			<?php else : ?>
+				<?php echo wp_kses_post( aiseo_admin_status_badge( '100%', 'success' ) ); ?>
+			<?php endif; ?>
+		</div>
+
+		<div class="aiseo-queue-health-strip">
+			<div class="aiseo-queue-health-strip__item">
+				<span class="aiseo-queue-health-strip__label"><?php esc_html_e( 'Toplam Draft', 'ai-seo-editor' ); ?></span>
+				<strong class="aiseo-queue-health-strip__value"><?php echo esc_html( number_format_i18n( $dash_total_drafts ) ); ?></strong>
+			</div>
+			<div class="aiseo-queue-health-strip__item">
+				<span class="aiseo-queue-health-strip__label"><?php esc_html_e( 'Kuyrukta', 'ai-seo-editor' ); ?></span>
+				<strong class="aiseo-queue-health-strip__value aiseo-queue-health-strip__value--ok"><?php echo esc_html( number_format_i18n( $dash_queued_drafts ) ); ?></strong>
+			</div>
+			<div class="aiseo-queue-health-strip__item">
+				<span class="aiseo-queue-health-strip__label"><?php esc_html_e( 'Kuyruk Dışı', 'ai-seo-editor' ); ?></span>
+				<strong class="aiseo-queue-health-strip__value <?php echo $dash_queue_outside > 0 ? 'aiseo-queue-health-strip__value--warn' : 'aiseo-queue-health-strip__value--ok'; ?>">
+					<?php echo esc_html( number_format_i18n( $dash_queue_outside ) ); ?>
+				</strong>
+			</div>
+			<div class="aiseo-queue-health-strip__item aiseo-queue-health-strip__item--bar">
+				<span class="aiseo-queue-health-strip__label"><?php esc_html_e( 'Kapsama', 'ai-seo-editor' ); ?></span>
+				<div class="aiseo-queue-coverage-bar">
+					<div class="aiseo-queue-coverage-bar__fill <?php echo $dash_queue_coverage >= 100 ? 'aiseo-queue-coverage-bar__fill--full' : 'aiseo-queue-coverage-bar__fill--partial'; ?>" style="width:<?php echo esc_attr( min( 100, $dash_queue_coverage ) ); ?>%"></div>
+				</div>
+				<small><?php echo esc_html( $dash_queue_coverage ); ?>%</small>
+			</div>
+		</div>
+
+		<?php if ( $dash_queue_outside > 0 ) : ?>
+			<div class="aiseo-warning-callout">
+				<span class="dashicons dashicons-warning"></span>
+				<div>
+					<strong><?php echo esc_html( sprintf( __( '%d draft kuyruk dışında.', 'ai-seo-editor' ), $dash_queue_outside ) ); ?></strong>
+					<p><?php esc_html_e( 'Akıllı Kuyruğu Yeniden Oluştur işlemi önerilir. Yazı içeriklerini değiştirmez.', 'ai-seo-editor' ); ?></p>
+				</div>
+				<a href="<?php echo esc_url( admin_url( 'admin.php?page=aiseo-auto-publisher' ) ); ?>" class="button button-primary"><?php esc_html_e( 'Otomatik Yayın Sayfasına Git', 'ai-seo-editor' ); ?></a>
+			</div>
+		<?php else : ?>
+			<div class="aiseo-success-callout">
+				<span class="dashicons dashicons-yes-alt"></span>
+				<strong><?php esc_html_e( 'Tüm draftlar kuyrukta. Queue sağlıklı görünüyor.', 'ai-seo-editor' ); ?></strong>
+			</div>
+		<?php endif; ?>
+
+		<?php if ( ! empty( $dash_queue_report ) ) : ?>
+			<div class="aiseo-panel aiseo-queue-report-card" style="margin-top:16px">
+				<div class="aiseo-panel__header">
+					<div>
+						<div class="aiseo-panel__eyebrow"><?php esc_html_e( 'Son Round-Robin Raporu', 'ai-seo-editor' ); ?></div>
+						<h3 class="aiseo-panel__title"><?php esc_html_e( 'Akıllı Kuyruk Bilgisi', 'ai-seo-editor' ); ?></h3>
+					</div>
+				</div>
+				<div class="aiseo-queue-report-grid">
+					<?php if ( isset( $dash_queue_report['first_160_unique_child_count'] ) ) : ?>
+						<div class="aiseo-queue-report-item">
+							<span><?php esc_html_e( 'İlk 160 benzersiz alt kategori', 'ai-seo-editor' ); ?></span>
+							<strong><?php echo esc_html( (string) $dash_queue_report['first_160_unique_child_count'] ); ?></strong>
+						</div>
+					<?php endif; ?>
+					<?php if ( isset( $dash_queue_report['first_160_adjacent_duplicate_count'] ) ) : ?>
+						<div class="aiseo-queue-report-item">
+							<span><?php esc_html_e( 'Bitişik tekrar sayısı', 'ai-seo-editor' ); ?></span>
+							<strong><?php echo esc_html( (string) $dash_queue_report['first_160_adjacent_duplicate_count'] ); ?></strong>
+						</div>
+					<?php endif; ?>
+					<?php if ( ! empty( $dash_queue_report['next_post_title'] ) ) : ?>
+						<div class="aiseo-queue-report-item aiseo-queue-report-item--full">
+							<span><?php esc_html_e( 'Sıradaki yazı', 'ai-seo-editor' ); ?></span>
+							<strong><?php echo esc_html( (string) $dash_queue_report['next_post_title'] ); ?></strong>
+						</div>
+					<?php endif; ?>
+				</div>
+			</div>
+		<?php endif; ?>
+	</section>
+	<?php endif; ?>
+
 
 	<section class="aiseo-dashboard-grid aiseo-dashboard-grid--secondary">
 		<div class="aiseo-panel">

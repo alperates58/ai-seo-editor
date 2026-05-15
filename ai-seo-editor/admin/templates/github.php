@@ -14,10 +14,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 	<?php
 	aiseo_admin_page_header(
 		[
-			'icon'     => 'dashicons-update',
-			'eyebrow'  => __( 'Release channel manager', 'ai-seo-editor' ),
-			'title'    => __( 'GitHub Guncelleme', 'ai-seo-editor' ),
-			'subtitle' => __( 'Manage repository connection, compare current plugin state, and run safer update flows from a clearer updater UI.', 'ai-seo-editor' ),
+			'icon'     => 'dashicons-admin-tools',
+			'eyebrow'  => __( 'Canlı eklenti güncelleme & geliştirici araçları', 'ai-seo-editor' ),
+			'title'    => __( 'Geliştirici Araçları', 'ai-seo-editor' ),
+			'subtitle' => __( 'GitHub bağlantısı ve plugin güncelleme işlemleri. Canlı dosyaları değiştirebilir — dikkatli kullanın.', 'ai-seo-editor' ),
 			'badges'   => [
 				[
 					'label' => $has_token ? __( 'Token hazir', 'ai-seo-editor' ) : __( 'Public mode', 'ai-seo-editor' ),
@@ -97,15 +97,27 @@ if ( ! defined( 'ABSPATH' ) ) {
 					<p><?php echo esc_html( $sha ? $sha : '--' ); ?></p>
 				</div>
 			</div>
-			<div class="aiseo-notice aiseo-notice--warning">
-				<strong><?php esc_html_e( 'Guvenli guncelleme notu', 'ai-seo-editor' ); ?></strong>
-				<?php esc_html_e( 'Canli sitede guncelleme yapmadan once yedek almaniz onerilir. Update islemi mevcut updater business logic ile calisir.', 'ai-seo-editor' ); ?>
-			</div>
-			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-				<?php wp_nonce_field( 'aiseo_update_from_github' ); ?>
-				<input type="hidden" name="action" value="aiseo_update_from_github">
-				<button type="submit" class="button button-primary button-large" onclick="return confirm('<?php echo esc_js( __( 'GitHub uzerinden guncelleme yapmak istediginize emin misiniz?', 'ai-seo-editor' ) ); ?>')"><?php esc_html_e( "GitHub'dan Guncelle", 'ai-seo-editor' ); ?></button>
-			</form>
+			<details class="aiseo-accordion-risk" style="margin-top:16px">
+				<summary class="aiseo-accordion-risk__summary">
+					<span class="dashicons dashicons-warning"></span>
+					<?php esc_html_e( 'Güncelleme İşlemi — Riskli', 'ai-seo-editor' ); ?>
+					<small><?php esc_html_e( '(Açmak için tıklayın)', 'ai-seo-editor' ); ?></small>
+				</summary>
+				<div class="aiseo-danger-zone">
+					<div class="aiseo-warning-callout">
+						<span class="dashicons dashicons-warning"></span>
+						<div>
+							<strong><?php esc_html_e( 'Dikkat: Canlı eklenti dosyalarını değiştirir!', 'ai-seo-editor' ); ?></strong>
+							<p><?php esc_html_e( 'Bu işlem canlı sitedeki eklenti dosyalarının üzerine yazar. Devam etmeden önce mutlaka tam yedek alın. Update işlemi mevcut updater business logic ile çalışır.', 'ai-seo-editor' ); ?></p>
+						</div>
+					</div>
+					<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin-top:12px">
+						<?php wp_nonce_field( 'aiseo_update_from_github' ); ?>
+						<input type="hidden" name="action" value="aiseo_update_from_github">
+						<button type="submit" class="button button-secondary" onclick="return confirm('<?php echo esc_js( __( 'Canlı eklenti dosyaları değiştirilecek. Yedek aldınız mı? Devam etmek istediğinizden emin misiniz?', 'ai-seo-editor' ) ); ?>')"><?php esc_html_e( "GitHub'dan Güncelle", 'ai-seo-editor' ); ?></button>
+					</form>
+				</div>
+			</details>
 			<div class="aiseo-info-card aiseo-info-card--muted">
 				<strong><?php esc_html_e( 'Release notes', 'ai-seo-editor' ); ?></strong>
 				<p><?php esc_html_e( 'Mevcut updater akisinda release notes verisi ayrica gelmiyor. Bu alan gelecekte veri mevcut oldugunda kullanilmak uzere hazir tutulur.', 'ai-seo-editor' ); ?></p>

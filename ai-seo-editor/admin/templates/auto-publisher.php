@@ -11,6 +11,16 @@ if ( ! defined( 'ABSPATH' ) ) {
 /** @var string|null $next_run */
 /** @var array $cron_status */
 /** @var array|null $next_queue_post */
+/** @var int $total_drafts */
+/** @var int $queued_drafts */
+/** @var int $queue_outside */
+/** @var int $queue_coverage */
+/** @var array|false $queue_report */
+$total_drafts   = $total_drafts ?? 0;
+$queued_drafts  = $queued_drafts ?? 0;
+$queue_outside  = $queue_outside ?? 0;
+$queue_coverage = $queue_coverage ?? 100;
+$queue_report   = is_array( $queue_report ?? false ) ? $queue_report : [];
 
 $intervals = [
 	'0.5' => 'Her 30 dakikada bir',
@@ -475,10 +485,57 @@ if ( empty( $activity_items ) ) {
 		<section class="aiseo-card aiseo-ap-panel aiseo-ap-queue">
 			<div class="aiseo-ap-panel__header">
 				<div>
-					<h2><?php esc_html_e( 'Bakim / Kuyruk Yonetimi', 'ai-seo-editor' ); ?></h2>
-					<p><?php esc_html_e( 'Cron ve sira kayitlarini guvenli sekilde yonetin. Yazi icerikleri silinmez.', 'ai-seo-editor' ); ?></p>
+					<h2><?php esc_html_e( 'Kuyruk Sağlığı & Bakım', 'ai-seo-editor' ); ?></h2>
+					<p><?php esc_html_e( 'Cron ve sıra kayıtlarını güvenli şekilde yönetin. Yazı içerikleri silinmez.', 'ai-seo-editor' ); ?></p>
 				</div>
 			</div>
+
+			<?php /* ── Queue Health Strip ── */ ?>
+			<div class="aiseo-queue-health-strip">
+				<div class="aiseo-queue-health-strip__item">
+					<span class="aiseo-queue-health-strip__label"><?php esc_html_e( 'Toplam Draft', 'ai-seo-editor' ); ?></span>
+					<strong class="aiseo-queue-health-strip__value"><?php echo esc_html( number_format_i18n( $total_drafts ) ); ?></strong>
+				</div>
+				<div class="aiseo-queue-health-strip__item">
+					<span class="aiseo-queue-health-strip__label"><?php esc_html_e( 'Kuyrukta', 'ai-seo-editor' ); ?></span>
+					<strong class="aiseo-queue-health-strip__value aiseo-queue-health-strip__value--ok"><?php echo esc_html( number_format_i18n( $queued_drafts ) ); ?></strong>
+				</div>
+				<div class="aiseo-queue-health-strip__item">
+					<span class="aiseo-queue-health-strip__label"><?php esc_html_e( 'Kuyruk Dışı', 'ai-seo-editor' ); ?></span>
+					<strong class="aiseo-queue-health-strip__value <?php echo $queue_outside > 0 ? 'aiseo-queue-health-strip__value--warn' : 'aiseo-queue-health-strip__value--ok'; ?>">
+						<?php echo esc_html( number_format_i18n( $queue_outside ) ); ?>
+					</strong>
+				</div>
+				<div class="aiseo-queue-health-strip__item aiseo-queue-health-strip__item--bar">
+					<span class="aiseo-queue-health-strip__label"><?php esc_html_e( 'Kapsama', 'ai-seo-editor' ); ?></span>
+					<div class="aiseo-queue-coverage-bar">
+						<div class="aiseo-queue-coverage-bar__fill <?php echo $queue_coverage >= 100 ? 'aiseo-queue-coverage-bar__fill--full' : 'aiseo-queue-coverage-bar__fill--partial'; ?>" style="width:<?php echo esc_attr( min( 100, $queue_coverage ) ); ?>%"></div>
+					</div>
+					<small><?php echo esc_html( $queue_coverage ); ?>%</small>
+				</div>
+				<?php if ( ! empty( $queue_report['next_post_title'] ) ) : ?>
+					<div class="aiseo-queue-health-strip__item aiseo-queue-health-strip__item--title">
+						<span class="aiseo-queue-health-strip__label"><?php esc_html_e( 'Sıradaki Yazı', 'ai-seo-editor' ); ?></span>
+						<strong class="aiseo-queue-health-strip__value"><?php echo esc_html( (string) $queue_report['next_post_title'] ); ?></strong>
+					</div>
+				<?php endif; ?>
+			</div>
+
+			<?php /* ── Queue Coverage Uyarısı ── */ ?>
+			<?php if ( $queue_outside > 0 ) : ?>
+				<div class="aiseo-warning-callout" style="margin:12px 0">
+					<span class="dashicons dashicons-warning"></span>
+					<div>
+						<strong><?php echo esc_html( sprintf( __( '%d draft kuyruk dışında.', 'ai-seo-editor' ), $queue_outside ) ); ?></strong>
+						<p><?php esc_html_e( 'Akıllı Kuyruğu Yeniden Oluştur önerilir. Yazı içeriklerini değiştirmez, sadece sıralamayı günceller.', 'ai-seo-editor' ); ?></p>
+					</div>
+				</div>
+			<?php else : ?>
+				<div class="aiseo-success-callout" style="margin:12px 0">
+					<span class="dashicons dashicons-yes-alt"></span>
+					<strong><?php esc_html_e( 'Tüm draftlar kuyrukta. Queue sağlıklı görünüyor.', 'ai-seo-editor' ); ?></strong>
+				</div>
+			<?php endif; ?>
 
 			<div class="aiseo-ap-highlight">
 				<div class="aiseo-ap-field-grid">
@@ -487,37 +544,83 @@ if ( empty( $activity_items ) ) {
 						<p id="aiseo-ap-maintenance-cron-status"><?php echo esc_html( $initial_cron_label ); ?></p>
 					</div>
 					<div class="aiseo-ap-field">
-						<label><?php esc_html_e( 'Siradaki Calisma', 'ai-seo-editor' ); ?></label>
-						<p id="aiseo-ap-maintenance-next-run"><?php echo esc_html( $next_run ?: __( 'Planli cron yok.', 'ai-seo-editor' ) ); ?></p>
+						<label><?php esc_html_e( 'Sonraki Çalışma', 'ai-seo-editor' ); ?></label>
+						<p id="aiseo-ap-maintenance-next-run"><?php echo esc_html( $next_run ?: __( 'Planlı cron yok.', 'ai-seo-editor' ) ); ?></p>
 					</div>
 					<div class="aiseo-ap-field">
 						<label><?php esc_html_e( 'Toplam Kuyruk', 'ai-seo-editor' ); ?></label>
 						<p id="aiseo-ap-maintenance-queue-count"><?php echo esc_html( (string) $total_queue_count ); ?></p>
 					</div>
 					<div class="aiseo-ap-field">
-						<label><?php esc_html_e( 'Siradaki Yazi', 'ai-seo-editor' ); ?></label>
+						<label><?php esc_html_e( 'Sıradaki Yazı', 'ai-seo-editor' ); ?></label>
 						<p id="aiseo-ap-maintenance-next-post"><?php echo esc_html( $initial_next_post ); ?></p>
 					</div>
 				</div>
 			</div>
 
+			<?php /* ── Smart Queue Report ── */ ?>
+			<?php if ( ! empty( $queue_report ) ) : ?>
+				<div class="aiseo-panel aiseo-queue-report-card" style="margin:12px 0 16px;">
+					<div class="aiseo-panel__header" style="padding-bottom:8px">
+						<div>
+							<div class="aiseo-panel__eyebrow"><?php esc_html_e( 'Son Akıllı Kuyruk Raporu', 'ai-seo-editor' ); ?></div>
+						</div>
+					</div>
+					<div class="aiseo-queue-report-grid">
+						<?php if ( isset( $queue_report['updated_count'] ) ) : ?>
+							<div class="aiseo-queue-report-item"><span><?php esc_html_e( 'Güncellenen', 'ai-seo-editor' ); ?></span><strong><?php echo esc_html( (string) $queue_report['updated_count'] ); ?></strong></div>
+						<?php endif; ?>
+						<?php if ( isset( $queue_report['total_drafts'] ) ) : ?>
+							<div class="aiseo-queue-report-item"><span><?php esc_html_e( 'Toplam Draft', 'ai-seo-editor' ); ?></span><strong><?php echo esc_html( (string) $queue_report['total_drafts'] ); ?></strong></div>
+						<?php endif; ?>
+						<?php if ( isset( $queue_report['bucket_count'] ) ) : ?>
+							<div class="aiseo-queue-report-item"><span><?php esc_html_e( 'Bucket Sayısı', 'ai-seo-editor' ); ?></span><strong><?php echo esc_html( (string) $queue_report['bucket_count'] ); ?></strong></div>
+						<?php endif; ?>
+						<?php if ( isset( $queue_report['first_160_unique_child_count'] ) ) : ?>
+							<div class="aiseo-queue-report-item"><span><?php esc_html_e( 'İlk 160 Benzersiz Alt Kategori', 'ai-seo-editor' ); ?></span><strong><?php echo esc_html( (string) $queue_report['first_160_unique_child_count'] ); ?></strong></div>
+						<?php endif; ?>
+						<?php if ( isset( $queue_report['first_160_adjacent_duplicate_count'] ) ) : ?>
+							<div class="aiseo-queue-report-item"><span><?php esc_html_e( 'Bitişik Tekrar', 'ai-seo-editor' ); ?></span><strong><?php echo esc_html( (string) $queue_report['first_160_adjacent_duplicate_count'] ); ?></strong></div>
+						<?php endif; ?>
+						<?php if ( ! empty( $queue_report['next_post_title'] ) ) : ?>
+							<div class="aiseo-queue-report-item aiseo-queue-report-item--full"><span><?php esc_html_e( 'Sıradaki Yazı', 'ai-seo-editor' ); ?></span><strong><?php echo esc_html( (string) $queue_report['next_post_title'] ); ?></strong></div>
+						<?php endif; ?>
+						<?php if ( ! empty( $queue_report['backup_path'] ) ) : ?>
+							<div class="aiseo-queue-report-item aiseo-queue-report-item--full"><span><?php esc_html_e( 'Yedek CSV', 'ai-seo-editor' ); ?></span><small><?php echo esc_html( (string) $queue_report['backup_path'] ); ?></small></div>
+						<?php endif; ?>
+					</div>
+				</div>
+			<?php endif; ?>
+
+			<?php /* ── Ana güvenli aksiyon ── */ ?>
 			<div class="aiseo-ap-smart-queue-callout">
 				<div class="aiseo-ap-smart-queue-callout__copy">
-					<strong><?php esc_html_e( 'Akilli Kuyrugu Yeniden Olustur', 'ai-seo-editor' ); ?></strong>
-					<p><?php esc_html_e( 'Hic yayini olmayan alt kategorilere oncelik verir ve taslaklari dengeli siraya dizer. Yazi iceriklerini silmez.', 'ai-seo-editor' ); ?></p>
+					<strong><?php esc_html_e( 'Akıllı Kuyruğu Yeniden Oluştur', 'ai-seo-editor' ); ?></strong>
+					<p><?php esc_html_e( 'Yazı içeriklerini değiştirmez. Sadece otomatik yayın sırasını yeniden oluşturur ve CSV yedek alır.', 'ai-seo-editor' ); ?></p>
 				</div>
-				<button type="button" id="aiseo-ap-rebuild-smart-queue" class="button button-primary"><?php esc_html_e( 'Akilli Kuyrugu Yeniden Olustur', 'ai-seo-editor' ); ?></button>
+				<button type="button" id="aiseo-ap-rebuild-smart-queue" class="button button-primary aiseo-safe-action"><?php esc_html_e( 'Akıllı Kuyruğu Yeniden Oluştur', 'ai-seo-editor' ); ?></button>
 			</div>
 
 			<div id="aiseo-ap-rebuild-smart-queue-result" class="aiseo-ap-smart-queue-result" aria-live="polite"></div>
 
-			<div class="aiseo-ap-actions">
-				<button type="button" id="aiseo-ap-stop-cron" class="button button-secondary"><?php esc_html_e( 'Cronu Durdur', 'ai-seo-editor' ); ?></button>
-				<button type="button" id="aiseo-ap-clear-queue-order" class="button button-secondary"><?php esc_html_e( 'Kuyrugu Temizle', 'ai-seo-editor' ); ?></button>
-				<button type="button" id="aiseo-ap-rebuild-queue" class="button button-secondary"><?php esc_html_e( 'Kuyrugu Yeniden Olustur', 'ai-seo-editor' ); ?></button>
-				<button type="button" id="aiseo-ap-check-cron-status" class="button button-secondary"><?php esc_html_e( 'Cron Durumunu Kontrol Et', 'ai-seo-editor' ); ?></button>
-				<button type="button" id="aiseo-ap-peek-next-post" class="button button-secondary"><?php esc_html_e( 'Siradaki Yaziyi Goster', 'ai-seo-editor' ); ?></button>
-			</div>
+			<?php /* ── Riskli işlemler: accordion ── */ ?>
+			<details class="aiseo-accordion-risk">
+				<summary class="aiseo-accordion-risk__summary">
+					<span class="dashicons dashicons-warning"></span>
+					<?php esc_html_e( 'Gelişmiş / Riskli İşlemler', 'ai-seo-editor' ); ?>
+					<small><?php esc_html_e( '(Açmak için tıklayın)', 'ai-seo-editor' ); ?></small>
+				</summary>
+				<div class="aiseo-danger-zone">
+					<p class="aiseo-danger-zone__note"><?php esc_html_e( 'Bu işlemler cron veya mevcut kuyruk sıralamasını etkileyebilir. Normal kullanımda yukarıdaki "Akıllı Kuyruğu Yeniden Oluştur" butonunu tercih edin.', 'ai-seo-editor' ); ?></p>
+					<div class="aiseo-ap-actions">
+						<button type="button" id="aiseo-ap-stop-cron" class="button button-secondary"><?php esc_html_e( 'Cronu Durdur', 'ai-seo-editor' ); ?></button>
+						<button type="button" id="aiseo-ap-clear-queue-order" class="button button-secondary"><?php esc_html_e( 'Kuyruğu Temizle', 'ai-seo-editor' ); ?></button>
+						<button type="button" id="aiseo-ap-rebuild-queue" class="button button-secondary"><?php esc_html_e( 'Kuyruğu Yeniden Oluştur', 'ai-seo-editor' ); ?></button>
+						<button type="button" id="aiseo-ap-check-cron-status" class="button button-secondary"><?php esc_html_e( 'Cron Durumunu Kontrol Et', 'ai-seo-editor' ); ?></button>
+						<button type="button" id="aiseo-ap-peek-next-post" class="button button-secondary"><?php esc_html_e( 'Sıradaki Yazıyı Göster', 'ai-seo-editor' ); ?></button>
+					</div>
+				</div>
+			</details>
 		</section>
 
 		<section class="aiseo-card aiseo-ap-panel aiseo-ap-queue">
