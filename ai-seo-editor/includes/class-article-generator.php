@@ -79,6 +79,7 @@ class AISEO_Article_Generator {
 		if ( $yoast->is_yoast_active() ) {
 			$yoast->set_focus_keyword( $post_id, $keyword );
 			$yoast->set_meta_description( $post_id, $meta_desc );
+			$yoast->set_seo_title( $post_id, $title );
 		}
 
 		if ( ! empty( $generation_result['suggested_tags'] ) ) {

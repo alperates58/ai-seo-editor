@@ -60,8 +60,12 @@ class AISEO_Yoast_Integration {
 	}
 
 	public function set_seo_title( int $post_id, string $title ): void {
-		if ( $this->is_yoast_active() && $this->is_sync_enabled() ) {
-			update_post_meta( $post_id, '_yoast_wpseo_title', aiseo_normalize_seo_title( $title ) );
+		$normalized = aiseo_normalize_seo_title( $title );
+		if ( $normalized === '' ) {
+			return;
+		}
+		if ( $this->is_yoast_active() ) {
+			update_post_meta( $post_id, '_yoast_wpseo_title', $normalized );
 		}
 	}
 
