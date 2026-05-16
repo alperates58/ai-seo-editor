@@ -283,9 +283,10 @@ class AISEO_Rest_Controller {
 
 		$this->check_token_budget();
 
+		$ap_settings = $this->load_auto_publisher_settings();
 		$client    = new AISEO_OpenAI_Client( $this->settings );
 		$optimizer = new AISEO_Optimizer( $client, $this->logger );
-		$result    = $optimizer->run( $post_id, $operation );
+		$result    = $optimizer->run( $post_id, $operation, (string) ( $ap_settings['tone'] ?? '' ) );
 
 		if ( ! $result['success'] ) {
 			return new WP_Error( 'aiseo_optimize_error', $result['error'] ?? __( 'İyileştirme başarısız.', 'ai-seo-editor' ), [ 'status' => 500 ] );
@@ -303,6 +304,7 @@ class AISEO_Rest_Controller {
 		$this->check_token_budget();
 
 		$post    = get_post( $post_id );
+		$ap_settings = $this->load_auto_publisher_settings();
 		$yoast   = new AISEO_Yoast_Integration();
 		$keyword = $yoast->get_focus_keyword( $post_id );
 		$title_input    = $request->has_param( 'title' ) ? sanitize_text_field( (string) $request->get_param( 'title' ) ) : ( $post instanceof WP_Post ? $post->post_title : '' );
@@ -325,7 +327,7 @@ class AISEO_Rest_Controller {
 			$result = $client->optimize_full_post(
 				$post_id,
 				$keyword,
-				(string) $this->settings->get( 'default_tone' ),
+				(string) ( $ap_settings['tone'] ?? $this->settings->get( 'default_tone' ) ),
 				$content_input,
 				$title_input,
 				$meta_input,
@@ -409,12 +411,13 @@ class AISEO_Rest_Controller {
 			$link_client   = new AISEO_OpenAI_Client( $this->settings );
 			$linker        = new AISEO_Internal_Linker( $link_client, $this->logger );
 			$suggestions   = $linker->find_suggestions( $post_id );
+			$link_limit    = max( 0, (int) ( $ap_settings['internal_links_count'] ?? 3 ) );
 			$suggestion_ids = array_map(
 				'absint',
 				array_filter(
 					array_map(
 						static fn( $item ) => $item['id'] ?? 0,
-						array_slice( is_array( $suggestions ) ? $suggestions : [], 0, 3 )
+						array_slice( is_array( $suggestions ) ? $suggestions : [], 0, $link_limit )
 					)
 				)
 			);
@@ -574,6 +577,7 @@ class AISEO_Rest_Controller {
 		$this->check_token_budget();
 
 		$post    = get_post( $post_id );
+		$ap_settings = $this->load_auto_publisher_settings();
 		$yoast   = new AISEO_Yoast_Integration();
 		$keyword = $yoast->get_focus_keyword( $post_id );
 		$title   = $post instanceof WP_Post ? $post->post_title : '';
@@ -587,15 +591,19 @@ class AISEO_Rest_Controller {
 
 		$categories = wp_get_post_categories( $post_id );
 		$content    = $post instanceof WP_Post ? $post->post_content : '';
+		$target_words = max( 300, min( 5000, (int) ( $ap_settings['target_words'] ?? 1000 ) ) );
+		if ( aiseo_count_words( $content ) > 0 ) {
+			$target_words = max( $target_words, min( 2500, aiseo_count_words( $content ) ) );
+		}
 
 		$params = [
 			'keyword'      => $keyword,
 			'title'        => $title,
-			'tone'         => $this->settings->get( 'default_tone' ),
+			'tone'         => (string) ( $ap_settings['tone'] ?? $this->settings->get( 'default_tone' ) ),
 			'language'     => $this->settings->get( 'default_language' ),
-			'target_words' => max( 800, min( 2500, aiseo_count_words( $content ) ?: 1200 ) ),
-			'include_faq'  => true,
-			'category'     => ! empty( $categories ) ? (int) $categories[0] : 0,
+			'target_words' => $target_words,
+			'include_faq'  => ! empty( $ap_settings['include_faq'] ),
+			'category'     => $this->resolve_generation_category_id( $categories ),
 		];
 
 		$client    = new AISEO_OpenAI_Client( $this->settings );
@@ -1314,10 +1322,11 @@ class AISEO_Rest_Controller {
 		$content_before = $post->post_content;
 		$title_before   = $post->post_title;
 		$meta_before    = $yoast->get_meta_description( $post_id );
+		$ap_settings    = $this->load_auto_publisher_settings();
 
 		try {
 			$client = new AISEO_OpenAI_Client( $this->settings );
-			$result = $client->optimize_full_post( $post_id, $keyword, (string) $this->settings->get( 'default_tone' ) );
+			$result = $client->optimize_full_post( $post_id, $keyword, (string) ( $ap_settings['tone'] ?? $this->settings->get( 'default_tone' ) ) );
 		} catch ( Throwable $e ) {
 			$this->logger->log_ai_operation(
 				$post_id,
@@ -1388,6 +1397,25 @@ class AISEO_Rest_Controller {
 				],
 			],
 		];
+	}
+
+	private function load_auto_publisher_settings(): array {
+		$ap = new AISEO_Auto_Publisher( $this->settings, $this->logger );
+		return $ap->get_settings();
+	}
+
+	private function resolve_generation_category_id( array $categories ): int {
+		if ( empty( $categories ) ) {
+			return 0;
+		}
+
+		usort( $categories, static function ( $a, $b ) {
+			$depth_a = count( get_ancestors( $a, 'category' ) );
+			$depth_b = count( get_ancestors( $b, 'category' ) );
+			return $depth_b <=> $depth_a;
+		} );
+
+		return (int) $categories[0];
 	}
 
 	public function optimize_tags( WP_REST_Request $request ): WP_REST_Response|WP_Error {

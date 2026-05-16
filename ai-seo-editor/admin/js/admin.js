@@ -10,6 +10,7 @@
 	const nonce   = Config.nonce || '';
 	const githubNonce = Config.githubNonce || nonce;
 	const queueRebuildNonce = Config.queueRebuildNonce || '';
+	const apInternalLinksCount = Math.max( 0, parseInt( Config.apInternalLinksCount || 3, 10 ) || 3 );
 
 	function initAutoPublisherEnhanced() {
 		const saveBtn = document.getElementById('aiseo-ap-save');
@@ -1016,7 +1017,7 @@
 				const computeRes = await API.computeLinks(postId);
 				const suggestions = computeRes.data?.suggestions || [];
 				const selectedIds = suggestions
-					.slice(0, 3)
+					.slice(0, apInternalLinksCount)
 					.map((item) => parseInt(item.id))
 					.filter((id) => Number.isFinite(id) && id > 0);
 
@@ -1523,7 +1524,7 @@
 					const computeRes = await API.computeLinks(postId);
 					const suggestions = computeRes.data?.suggestions || [];
 					const selectedIds = suggestions
-						.slice(0, 3)
+						.slice(0, apInternalLinksCount)
 						.map((item) => parseInt(item.id))
 						.filter((id) => Number.isFinite(id) && id > 0);
 

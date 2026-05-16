@@ -244,6 +244,8 @@ class AISEO_Admin {
 		$current_page = sanitize_key( $_GET['page'] ?? '' );
 		$post_id      = absint( $_GET['post'] ?? 0 );
 
+		$auto_publisher_settings = ( new AISEO_Auto_Publisher( $this->settings, $this->logger ) )->get_settings();
+
 		wp_localize_script( 'aiseo-admin', 'AISeoConfig', [
 			'restUrl'     => esc_url_raw( rest_url() ),
 			'nonce'       => wp_create_nonce( 'wp_rest' ),
@@ -253,6 +255,7 @@ class AISEO_Admin {
 			'currentPage' => $current_page,
 			'pluginUrl'   => AISEO_PLUGIN_URL,
 			'ajaxUrl'     => admin_url( 'admin-ajax.php' ),
+			'apInternalLinksCount' => max( 0, (int) ( $auto_publisher_settings['internal_links_count'] ?? 3 ) ),
 			'i18n'        => [
 				'analyzing'        => __( 'Analiz ediliyor...', 'ai-seo-editor' ),
 				'generating'       => __( 'AI ile üretiliyor...', 'ai-seo-editor' ),

@@ -15,10 +15,10 @@ class AISEO_Optimizer {
 		$this->yoast  = new AISEO_Yoast_Integration();
 	}
 
-	public function run( int $post_id, string $operation ): array {
+	public function run( int $post_id, string $operation, ?string $tone_override = null ): array {
 		$settings = AISEO_Plugin::get_instance()->get_settings();
 		$keyword  = $this->yoast->get_focus_keyword( $post_id );
-		$tone     = $settings->get( 'default_tone' );
+		$tone     = $tone_override ?: $settings->get( 'default_tone' );
 		$model    = $settings->get( 'openai_model' );
 
 		try {
