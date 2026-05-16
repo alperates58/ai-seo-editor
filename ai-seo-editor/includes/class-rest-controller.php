@@ -273,6 +273,7 @@ class AISEO_Rest_Controller {
 	public function run_optimize( WP_REST_Request $request ): WP_REST_Response|WP_Error {
 		$post_id   = absint( $request->get_param( 'post_id' ) );
 		$operation = sanitize_key( $request->get_param( 'operation' ) ?? '' );
+		$aligned   = (bool) ( $request->get_param( 'auto_publish_aligned' ) ?? false );
 
 		if ( ! $this->post_exists( $post_id ) ) {
 			return $this->not_found();
@@ -282,6 +283,15 @@ class AISEO_Rest_Controller {
 		}
 
 		$this->check_token_budget();
+
+		if ( $aligned ) {
+			$aligned_result = $this->build_auto_publish_aligned_operation_result( $post_id, $operation );
+			if ( is_wp_error( $aligned_result ) ) {
+				return $aligned_result;
+			}
+
+			return $this->ok( $aligned_result, __( 'AI Ã¶nerisi hazÄ±r.', 'ai-seo-editor' ) );
+		}
 
 		$ap_settings = $this->load_auto_publisher_settings();
 		$client    = new AISEO_OpenAI_Client( $this->settings );
@@ -1402,6 +1412,71 @@ class AISEO_Rest_Controller {
 	private function load_auto_publisher_settings(): array {
 		$ap = new AISEO_Auto_Publisher( $this->settings, $this->logger );
 		return $ap->get_settings();
+	}
+
+	private function build_auto_publish_aligned_operation_result( int $post_id, string $operation ): array|WP_Error {
+		$full_optimize_operations = [
+			'optimize_title',
+			'optimize_meta',
+			'improve_intro',
+			'improve_readability',
+			'improve_structure',
+			'improve_keyword_density',
+			'add_faq',
+			'improve_conclusion',
+		];
+
+		if ( ! in_array( $operation, $full_optimize_operations, true ) ) {
+			$ap_settings = $this->load_auto_publisher_settings();
+			$client      = new AISEO_OpenAI_Client( $this->settings );
+			$optimizer   = new AISEO_Optimizer( $client, $this->logger );
+			$result      = $optimizer->run( $post_id, $operation, (string) ( $ap_settings['tone'] ?? '' ) );
+
+			if ( empty( $result['success'] ) ) {
+				return new WP_Error( 'aiseo_optimize_error', $result['error'] ?? __( 'Ä°yileÅŸtirme baÅŸarÄ±sÄ±z.', 'ai-seo-editor' ), [ 'status' => 500 ] );
+			}
+
+			return $result;
+		}
+
+		$proposal = $this->build_full_optimization_proposal( $post_id );
+		if ( is_wp_error( $proposal ) ) {
+			return $proposal;
+		}
+
+		$post           = get_post( $post_id );
+		$yoast          = new AISEO_Yoast_Integration();
+		$title_before   = $post instanceof WP_Post ? (string) $post->post_title : '';
+		$meta_before    = $yoast->get_meta_description( $post_id );
+		$content_before = $post instanceof WP_Post ? (string) $post->post_content : '';
+
+		return match ( $operation ) {
+			'optimize_title' => [
+				'success'   => true,
+				'operation' => $operation,
+				'post_id'   => $post_id,
+				'before'    => $title_before,
+				'after'     => (string) ( $proposal['title'] ?? $title_before ),
+				'field'     => 'post_title',
+			],
+			'optimize_meta' => [
+				'success'   => true,
+				'operation' => $operation,
+				'post_id'   => $post_id,
+				'before'    => $meta_before,
+				'after'     => (string) ( $proposal['meta'] ?? $meta_before ),
+				'field'     => 'meta',
+				'meta_key'  => '_aiseo_meta_description',
+			],
+			default => [
+				'success'   => true,
+				'operation' => $operation,
+				'post_id'   => $post_id,
+				'before'    => $content_before,
+				'after'     => (string) ( $proposal['content'] ?? $content_before ),
+				'field'     => 'post_content',
+			],
+		};
 	}
 
 	private function resolve_generation_category_id( array $categories ): int {

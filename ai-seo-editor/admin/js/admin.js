@@ -247,7 +247,7 @@
 		},
 		analyzePost:      (pid, force) => API.request('/analyze/' + pid, 'POST', { force: !!force }),
 		getAnalysis:      (pid)        => API.request('/analyze/' + pid),
-		optimize:         (pid, op)    => API.request('/optimize', 'POST', { post_id: pid, operation: op }),
+		optimize:         (pid, op, extra)    => API.request('/optimize', 'POST', Object.assign({ post_id: pid, operation: op }, extra || {})),
 		fullOptimize:     (pid, data)  => API.request('/optimize/full', 'POST', Object.assign({ post_id: pid }, data || {})),
 		agentOptimize:    (data)       => API.request('/agent/optimize', 'POST', data),
 		agentApply:       (data)       => API.request('/agent/apply', 'POST', data),
@@ -1472,7 +1472,7 @@
 				UI.loading(button, true);
 				try {
 					if (config.type === 'operation' && config.operation) {
-						const res = await API.optimize(postId, config.operation);
+						const res = await API.optimize(postId, config.operation, { auto_publish_aligned: true });
 						renderEditorSuggestion(preview, res.data || {});
 					} else if (config.type === 'full') {
 						const res = await API.fullOptimize(postId, getFullOptimizePayload(postId));
@@ -1490,7 +1490,7 @@
 				event.preventDefault();
 				UI.loading(button, true);
 				try {
-					const res = await API.optimize(postId, button.dataset.operation);
+					const res = await API.optimize(postId, button.dataset.operation, { auto_publish_aligned: true });
 					renderEditorSuggestion(preview, res.data || {});
 				} catch (e) {
 					UI.notice('aiseo-editor-notice', e.message || i18n.error, 'error');
@@ -1818,7 +1818,7 @@
 				const operation = btn.dataset.operation;
 				UI.loading(btn, true);
 				try {
-					const res = await API.optimize(postId, operation);
+					const res = await API.optimize(postId, operation, { auto_publish_aligned: true });
 					renderEditorSuggestion(preview, res.data || {}, false);
 				} catch (e) {
 					UI.notice('aiseo-editor-notice', e.message || i18n.error, 'error');
