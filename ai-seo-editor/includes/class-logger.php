@@ -226,20 +226,33 @@ class AISEO_Logger {
 		);
 
 		$green = (int) $wpdb->get_var(
-			"SELECT COUNT(DISTINCT post_id) FROM {$wpdb->prefix}aiseo_analysis_logs WHERE seo_score >= 80"
+			"SELECT COUNT(*) FROM {$wpdb->posts} p
+			 INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key = '_aiseo_seo_score'
+			 WHERE p.post_status = 'publish' AND p.post_type = 'post'
+			 AND CAST(pm.meta_value AS UNSIGNED) >= 80"
 		);
 		$yellow = (int) $wpdb->get_var(
-			"SELECT COUNT(DISTINCT post_id) FROM {$wpdb->prefix}aiseo_analysis_logs WHERE seo_score >= 60 AND seo_score < 80"
+			"SELECT COUNT(*) FROM {$wpdb->posts} p
+			 INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key = '_aiseo_seo_score'
+			 WHERE p.post_status = 'publish' AND p.post_type = 'post'
+			 AND CAST(pm.meta_value AS UNSIGNED) BETWEEN 60 AND 79"
 		);
 		$red = (int) $wpdb->get_var(
-			"SELECT COUNT(DISTINCT post_id) FROM {$wpdb->prefix}aiseo_analysis_logs WHERE seo_score < 60"
+			"SELECT COUNT(*) FROM {$wpdb->posts} p
+			 INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key = '_aiseo_seo_score'
+			 WHERE p.post_status = 'publish' AND p.post_type = 'post'
+			 AND CAST(pm.meta_value AS UNSIGNED) BETWEEN 1 AND 59"
 		);
 
 		$avg_seo = (float) $wpdb->get_var(
-			"SELECT AVG(seo_score) FROM {$wpdb->prefix}aiseo_analysis_logs"
+			"SELECT AVG(CAST(pm.meta_value AS DECIMAL(10,2))) FROM {$wpdb->posts} p
+			 INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key = '_aiseo_seo_score'
+			 WHERE p.post_status = 'publish' AND p.post_type = 'post'"
 		);
 		$avg_read = (float) $wpdb->get_var(
-			"SELECT AVG(readability_score) FROM {$wpdb->prefix}aiseo_analysis_logs"
+			"SELECT AVG(CAST(pm.meta_value AS DECIMAL(10,2))) FROM {$wpdb->posts} p
+			 INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key = '_aiseo_readability_score'
+			 WHERE p.post_status = 'publish' AND p.post_type = 'post'"
 		);
 
 		$no_meta = (int) $wpdb->get_var(
@@ -257,11 +270,15 @@ class AISEO_Logger {
 		$token_by_day   = $this->get_token_usage_by_day( 30 );
 
 		$low_score_posts = $wpdb->get_results(
-			"SELECT l.post_id, l.seo_score, l.readability_score, p.post_title
-			 FROM {$wpdb->prefix}aiseo_analysis_logs l
-			 JOIN {$wpdb->posts} p ON l.post_id = p.ID
-			 WHERE p.post_status = 'publish'
-			 ORDER BY l.seo_score ASC LIMIT 10",
+			"SELECT p.ID AS post_id, p.post_title,
+			 CAST(seo.meta_value AS UNSIGNED) AS seo_score,
+			 CAST(readability.meta_value AS UNSIGNED) AS readability_score
+			 FROM {$wpdb->posts} p
+			 INNER JOIN {$wpdb->postmeta} seo ON seo.post_id = p.ID AND seo.meta_key = '_aiseo_seo_score'
+			 LEFT JOIN {$wpdb->postmeta} readability ON readability.post_id = p.ID AND readability.meta_key = '_aiseo_readability_score'
+			 WHERE p.post_status = 'publish' AND p.post_type = 'post'
+			 ORDER BY CAST(seo.meta_value AS UNSIGNED) ASC, p.post_modified DESC
+			 LIMIT 10",
 			ARRAY_A
 		);
 
