@@ -137,7 +137,7 @@ class AISEO_Activator {
 					'default_tone'         => 'professional',
 					'monthly_token_limit'  => 500000,
 					'enable_logging'       => true,
-					'enable_yoast_sync'    => false,
+					'enable_yoast_sync'    => true,
 					'analysis_cache_ttl'   => 86400,
 					'daily_limit'          => 100,
 				],

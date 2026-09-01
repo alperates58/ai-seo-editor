@@ -55,6 +55,23 @@ class AISEO_Plugin {
 		if ( wp_is_post_revision( $post_id ) ) {
 			return;
 		}
+
+		if ( isset( $_POST['_aiseo_meta_description'] ) ) {
+			$meta = sanitize_textarea_field( wp_unslash( $_POST['_aiseo_meta_description'] ) );
+			if ( $meta !== '' ) {
+				update_post_meta( $post_id, '_aiseo_meta_description', $meta );
+				$yoast = new AISEO_Yoast_Integration();
+				if ( $yoast->is_yoast_active() ) {
+					$yoast->set_meta_description( $post_id, $meta );
+				}
+			}
+		} elseif ( isset( $_POST['yoast_wpseo_metadesc'] ) ) {
+			$meta = sanitize_textarea_field( wp_unslash( $_POST['yoast_wpseo_metadesc'] ) );
+			if ( $meta !== '' ) {
+				update_post_meta( $post_id, '_aiseo_meta_description', $meta );
+			}
+		}
+
 		$this->logger->invalidate_cache( $post_id );
 	}
 }

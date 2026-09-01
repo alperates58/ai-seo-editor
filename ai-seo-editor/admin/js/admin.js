@@ -508,15 +508,52 @@
 	}
 
 	function getEditorMetaValue(postId) {
+		try {
+			if (window.YoastSEO?.app?.snippetEditor?.getDescription) {
+				const desc = window.YoastSEO.app.snippetEditor.getDescription();
+				if (desc && String(desc).trim()) return String(desc).trim();
+			} else if (window.YoastSEO?.wp?.snippetEditor?.getDescription) {
+				const desc = window.YoastSEO.wp.snippetEditor.getDescription();
+				if (desc && String(desc).trim()) return String(desc).trim();
+			}
+		} catch (e) {}
+
+		try {
+			if (window.wp?.data?.select) {
+				const yoastSelect = window.wp.data.select('yoast-seo/editor');
+				if (yoastSelect?.getDescription) {
+					const desc = yoastSelect.getDescription();
+					if (desc && String(desc).trim()) return String(desc).trim();
+				}
+				const coreSelect = window.wp.data.select('core/editor');
+				const meta = coreSelect?.getEditedPostAttribute?.('meta');
+				if (meta?._yoast_wpseo_metadesc) return String(meta._yoast_wpseo_metadesc).trim();
+				if (meta?._aiseo_meta_description) return String(meta._aiseo_meta_description).trim();
+			}
+		} catch (e) {}
+
 		const selectors = [
+			'#yoast-snippet-editor-metadesc',
+			'textarea#yoast-snippet-editor-metadesc',
+			'#yoast-google-preview-description-metabox',
+			'#yoast-google-preview-description',
+			'.yoast-snippet-editor__description textarea',
+			'textarea.yoast-field-group__textarea',
+			'textarea[id*="yoast"][id*="metadesc"]',
+			'textarea[id*="yoast"][id*="description"]',
 			'#yoast_wpseo_metadesc',
 			'#_yoast_wpseo_metadesc',
 			'textarea[name="yoast_wpseo_metadesc"]',
 			'textarea[name="_yoast_wpseo_metadesc"]',
+			'input[name="yoast_wpseo_metadesc"]',
+			'input[name="_yoast_wpseo_metadesc"]',
 			'#rank_math_description',
 			'textarea[name="rank_math_description"]',
+			'textarea.rank-math-description',
 			'#aioseo-post-settings-description',
-			'textarea[name="aioseo_description"]'
+			'textarea[name="aioseo_description"]',
+			'#seopress_titles_desc',
+			'textarea[name="_seopress_titles_desc"]'
 		];
 
 		for (const selector of selectors) {
@@ -2099,20 +2136,75 @@
 		return hits >= 3;
 	}
 
+	function setNativeInputValue(element, value) {
+		if (!element) return false;
+		const isTextArea = element.tagName && element.tagName.toLowerCase() === 'textarea';
+		const prototype = isTextArea ? window.HTMLTextAreaElement?.prototype : window.HTMLInputElement?.prototype;
+		const descriptor = prototype ? Object.getOwnPropertyDescriptor(prototype, 'value') : null;
+
+		if (descriptor && descriptor.set) {
+			descriptor.set.call(element, value);
+		} else {
+			element.value = value;
+		}
+
+		element.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+		element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+		element.dispatchEvent(new Event('blur', { bubbles: true, cancelable: true }));
+		return true;
+	}
+
 	function applyEditorTitle(title) {
+		const value = String(title || '').trim();
+		if (!value) return;
+
+		// Gutenberg Dispatch
 		if (window.wp?.data?.dispatch) {
 			const editor = window.wp.data.dispatch('core/editor');
 			if (editor?.editPost) {
-				editor.editPost({ title });
-				return;
+				editor.editPost({
+					title: value,
+					meta: { _yoast_wpseo_title: value }
+				});
+			}
+			const yoastEditor = window.wp.data.dispatch('yoast-seo/editor');
+			if (yoastEditor?.setTitle) {
+				yoastEditor.setTitle(value);
 			}
 		}
+
+		// WP standard title
 		const titleInput = document.getElementById('title');
 		if (titleInput) {
-			titleInput.value = title;
-			titleInput.dispatchEvent(new Event('input', { bubbles: true }));
-			titleInput.dispatchEvent(new Event('change', { bubbles: true }));
+			setNativeInputValue(titleInput, value);
 		}
+
+		// SEO plugins title selectors
+		const titleSelectors = [
+			'#yoast-snippet-editor-title',
+			'#yoast-google-preview-title-metabox',
+			'#yoast-google-preview-title',
+			'input[name="yoast_wpseo_title"]',
+			'#yoast_wpseo_title',
+			'#rank_math_title',
+			'input[name="rank_math_title"]',
+			'#aioseo-post-settings-title',
+			'input[name="aioseo_title"]'
+		];
+		titleSelectors.forEach((selector) => {
+			document.querySelectorAll(selector).forEach((field) => {
+				setNativeInputValue(field, value);
+			});
+		});
+
+		// Yoast JS API
+		try {
+			if (window.YoastSEO?.app?.snippetEditor?.setTitle) {
+				window.YoastSEO.app.snippetEditor.setTitle(value);
+			} else if (window.YoastSEO?.wp?.snippetEditor?.setTitle) {
+				window.YoastSEO.wp.snippetEditor.setTitle(value);
+			}
+		} catch (e) {}
 	}
 
 	function applyEditorTags(tags) {
@@ -2193,33 +2285,100 @@
 		localStorage.setItem('aiseo_pending_meta_' + (postId || Config.postId), value);
 
 		const selectors = [
+			'#yoast-snippet-editor-metadesc',
+			'textarea#yoast-snippet-editor-metadesc',
+			'#yoast-google-preview-description-metabox',
+			'#yoast-google-preview-description',
+			'.yoast-snippet-editor__description textarea',
+			'textarea.yoast-field-group__textarea',
+			'textarea[id*="yoast"][id*="metadesc"]',
+			'textarea[id*="yoast"][id*="description"]',
 			'#yoast_wpseo_metadesc',
 			'#_yoast_wpseo_metadesc',
 			'textarea[name="yoast_wpseo_metadesc"]',
 			'textarea[name="_yoast_wpseo_metadesc"]',
+			'input[name="yoast_wpseo_metadesc"]',
+			'input[name="_yoast_wpseo_metadesc"]',
 			'#rank_math_description',
 			'textarea[name="rank_math_description"]',
+			'textarea.rank-math-description',
 			'#aioseo-post-settings-description',
-			'textarea[name="aioseo_description"]'
+			'textarea[name="aioseo_description"]',
+			'#seopress_titles_desc',
+			'textarea[name="_seopress_titles_desc"]'
 		];
 
 		let applied = false;
 		selectors.forEach((selector) => {
 			document.querySelectorAll(selector).forEach((field) => {
-				if ('value' in field) {
-					field.value = value;
-					field.dispatchEvent(new Event('input', { bubbles: true }));
-					field.dispatchEvent(new Event('change', { bubbles: true }));
+				if (setNativeInputValue(field, value)) {
 					applied = true;
 				}
 			});
 		});
 
-		if (!applied && window.wp?.data?.dispatch) {
-			const editor = window.wp.data.dispatch('core/editor');
-			if (editor?.editPost) {
-				editor.editPost({ meta: { _aiseo_meta_description: value } });
+		// Yoast JS API hooks
+		try {
+			if (window.YoastSEO?.app?.snippetEditor?.setDescription) {
+				window.YoastSEO.app.snippetEditor.setDescription(value);
+				applied = true;
+			} else if (window.YoastSEO?.wp?.snippetEditor?.setDescription) {
+				window.YoastSEO.wp.snippetEditor.setDescription(value);
+				applied = true;
+			} else if (window.YoastSEO?.snippetPreview?.setDescription) {
+				window.YoastSEO.snippetPreview.setDescription(value);
+				applied = true;
 			}
+		} catch (e) {}
+
+		// Yoast jQuery event trigger
+		try {
+			if (window.jQuery) {
+				window.jQuery(document).trigger('wpseo_metadesc_change', [value]);
+			}
+		} catch (e) {}
+
+		// WordPress / Gutenberg / Yoast dispatch
+		try {
+			if (window.wp?.data?.dispatch) {
+				const yoastEditor = window.wp.data.dispatch('yoast-seo/editor');
+				if (yoastEditor?.setDescription) {
+					yoastEditor.setDescription(value);
+					applied = true;
+				}
+				const coreEditor = window.wp.data.dispatch('core/editor');
+				if (coreEditor?.editPost) {
+					coreEditor.editPost({
+						meta: {
+							_yoast_wpseo_metadesc: value,
+							_aiseo_meta_description: value
+						}
+					});
+					applied = true;
+				}
+			}
+		} catch (e) {}
+
+		// Form fallback for Classic Editor form submission
+		const postForm = document.getElementById('post');
+		if (postForm) {
+			let hiddenYoast = postForm.querySelector('input[name="yoast_wpseo_metadesc"]');
+			if (!hiddenYoast) {
+				hiddenYoast = document.createElement('input');
+				hiddenYoast.type = 'hidden';
+				hiddenYoast.name = 'yoast_wpseo_metadesc';
+				postForm.appendChild(hiddenYoast);
+			}
+			hiddenYoast.value = value;
+
+			let hiddenAiseo = postForm.querySelector('input[name="_aiseo_meta_description"]');
+			if (!hiddenAiseo) {
+				hiddenAiseo = document.createElement('input');
+				hiddenAiseo.type = 'hidden';
+				hiddenAiseo.name = '_aiseo_meta_description';
+				postForm.appendChild(hiddenAiseo);
+			}
+			hiddenAiseo.value = value;
 		}
 	}
 

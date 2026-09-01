@@ -74,6 +74,10 @@ class AISEO_Yoast_Integration {
 	}
 
 	private function is_sync_enabled(): bool {
-		return (bool) AISEO_Plugin::get_instance()->get_settings()->get( 'enable_yoast_sync' );
+		$val = AISEO_Plugin::get_instance()->get_settings()->get( 'enable_yoast_sync' );
+		if ( $val !== null ) {
+			return (bool) $val;
+		}
+		return true;
 	}
 }
