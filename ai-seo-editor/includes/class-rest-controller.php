@@ -329,7 +329,7 @@ class AISEO_Rest_Controller {
 		}
 
 		if ( empty( $keyword ) ) {
-			return new WP_Error( 'aiseo_missing_param', __( 'Tam duzeltme icin baslik veya odak kelime gereklidir.', 'ai-seo-editor' ), [ 'status' => 422 ] );
+			return new WP_Error( 'aiseo_missing_param', __( 'Tam duzeltme icin baslik veya odak kelime gereklidir.', 'ai-seo-editor' ), [ 'status' => 403 ] );
 		}
 
 		try {
@@ -376,6 +376,14 @@ class AISEO_Rest_Controller {
 		$tags    = array_map( 'sanitize_text_field', is_array( $result['suggested_tags'] ?? null ) ? $result['suggested_tags'] : [] );
 		$tags    = $optimize_tags ? $this->filter_new_tags( $post_id, $tags, 3 ) : [];
 		$tokens  = (int) ( $result['tokens_used'] ?? 0 );
+
+		if ( empty( $meta ) ) {
+			$meta_res = $client->optimize_meta( $post_id, $keyword );
+			if ( ! empty( $meta_res['after'] ) ) {
+				$meta    = $meta_res['after'];
+				$tokens += (int) ( $meta_res['tokens_used'] ?? 0 );
+			}
+		}
 
 		$steps = [
 			[
@@ -1371,6 +1379,14 @@ class AISEO_Rest_Controller {
 		$tags    = $this->filter_new_tags( $post_id, $tags, 3 );
 		$tokens  = (int) ( $result['tokens_used'] ?? 0 );
 
+		if ( empty( $meta ) ) {
+			$meta_res = $client->optimize_meta( $post_id, $keyword );
+			if ( ! empty( $meta_res['after'] ) ) {
+				$meta    = $meta_res['after'];
+				$tokens += (int) ( $meta_res['tokens_used'] ?? 0 );
+			}
+		}
+
 		$this->logger->log_ai_operation(
 			$post_id,
 			'agent_full_optimize',
@@ -1415,27 +1431,15 @@ class AISEO_Rest_Controller {
 	}
 
 	private function build_auto_publish_aligned_operation_result( int $post_id, string $operation ): array|WP_Error {
-		$full_optimize_operations = [
-			'optimize_title',
-			'optimize_meta',
-			'improve_intro',
-			'improve_readability',
-			'improve_structure',
-			'improve_keyword_density',
-			'add_faq',
-			'improve_conclusion',
-		];
+		$ap_settings = $this->load_auto_publisher_settings();
+		$client      = new AISEO_OpenAI_Client( $this->settings );
+		$optimizer   = new AISEO_Optimizer( $client, $this->logger );
 
-		if ( ! in_array( $operation, $full_optimize_operations, true ) ) {
-			$ap_settings = $this->load_auto_publisher_settings();
-			$client      = new AISEO_OpenAI_Client( $this->settings );
-			$optimizer   = new AISEO_Optimizer( $client, $this->logger );
-			$result      = $optimizer->run( $post_id, $operation, (string) ( $ap_settings['tone'] ?? '' ) );
-
+		if ( $operation !== 'full_content_optimization' ) {
+			$result = $optimizer->run( $post_id, $operation, (string) ( $ap_settings['tone'] ?? '' ) );
 			if ( empty( $result['success'] ) ) {
-				return new WP_Error( 'aiseo_optimize_error', $result['error'] ?? __( 'Ä°yileÅŸtirme baÅŸarÄ±sÄ±z.', 'ai-seo-editor' ), [ 'status' => 500 ] );
+				return new WP_Error( 'aiseo_optimize_error', $result['error'] ?? __( 'İyileştirme başarısız.', 'ai-seo-editor' ), [ 'status' => 500 ] );
 			}
-
 			return $result;
 		}
 
@@ -1445,38 +1449,16 @@ class AISEO_Rest_Controller {
 		}
 
 		$post           = get_post( $post_id );
-		$yoast          = new AISEO_Yoast_Integration();
-		$title_before   = $post instanceof WP_Post ? (string) $post->post_title : '';
-		$meta_before    = $yoast->get_meta_description( $post_id );
 		$content_before = $post instanceof WP_Post ? (string) $post->post_content : '';
 
-		return match ( $operation ) {
-			'optimize_title' => [
-				'success'   => true,
-				'operation' => $operation,
-				'post_id'   => $post_id,
-				'before'    => $title_before,
-				'after'     => (string) ( $proposal['title'] ?? $title_before ),
-				'field'     => 'post_title',
-			],
-			'optimize_meta' => [
-				'success'   => true,
-				'operation' => $operation,
-				'post_id'   => $post_id,
-				'before'    => $meta_before,
-				'after'     => (string) ( $proposal['meta'] ?? $meta_before ),
-				'field'     => 'meta',
-				'meta_key'  => '_aiseo_meta_description',
-			],
-			default => [
-				'success'   => true,
-				'operation' => $operation,
-				'post_id'   => $post_id,
-				'before'    => $content_before,
-				'after'     => (string) ( $proposal['content'] ?? $content_before ),
-				'field'     => 'post_content',
-			],
-		};
+		return [
+			'success'   => true,
+			'operation' => $operation,
+			'post_id'   => $post_id,
+			'before'    => $content_before,
+			'after'     => (string) ( $proposal['content'] ?? $content_before ),
+			'field'     => 'post_content',
+		];
 	}
 
 	private function resolve_generation_category_id( array $categories ): int {

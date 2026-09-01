@@ -62,6 +62,9 @@ class AISEO_OpenAI_Client {
 	public function optimize_title( int $post_id, string $keyword ): array {
 		$post  = get_post( $post_id );
 		$title = get_the_title( $post_id );
+		if ( empty( $keyword ) && $post instanceof WP_Post ) {
+			$keyword = $post->post_title;
+		}
 		$intro = aiseo_get_first_paragraph( apply_filters( 'the_content', $post->post_content ?? '' ) );
 
 		$messages = [
@@ -77,9 +80,10 @@ class AISEO_OpenAI_Client {
 
 		$response = $this->chat_completion( $messages, 120, 0.6 );
 		return [
-			'before' => $title,
-			'after'  => aiseo_normalize_seo_title( trim( (string) ( $response['content'] ?? '' ) ) ),
-			'field'  => 'post_title',
+			'before'      => $title,
+			'after'       => aiseo_normalize_seo_title( trim( (string) ( $response['content'] ?? '' ) ) ),
+			'field'       => 'post_title',
+			'tokens_used' => $response['total_tokens'] ?? 0,
 		];
 	}
 
@@ -133,6 +137,9 @@ class AISEO_OpenAI_Client {
 		$yoast   = new AISEO_Yoast_Integration();
 		$current = $yoast->get_meta_description( $post_id );
 		$post    = get_post( $post_id );
+		if ( empty( $keyword ) && $post instanceof WP_Post ) {
+			$keyword = $post->post_title;
+		}
 		$content = aiseo_strip_html( apply_filters( 'the_content', $post->post_content ?? '' ) );
 
 		$messages = [
@@ -142,16 +149,17 @@ class AISEO_OpenAI_Client {
 			],
 			[
 				'role'    => 'user',
-				'content' => "Odak kelime: {$keyword}\nMevcut meta: {$current}\nIcerik: " . aiseo_truncate( $content, 900 ),
+				'content' => "Odak kelime: {$keyword}\nMevcut meta: " . ( $current !== '' ? $current : 'Yok (Sifirdan uretilecek)' ) . "\nIcerik: " . aiseo_truncate( $content, 900 ),
 			],
 		];
 
 		$response = $this->chat_completion( $messages, 220, 0.6 );
 		return [
-			'before'   => $current,
-			'after'    => aiseo_normalize_meta_description( (string) ( $response['content'] ?? '' ) ),
-			'field'    => 'meta',
-			'meta_key' => '_aiseo_meta_description',
+			'before'      => $current,
+			'after'       => aiseo_normalize_meta_description( (string) ( $response['content'] ?? '' ) ),
+			'field'       => 'meta',
+			'meta_key'    => '_aiseo_meta_description',
+			'tokens_used' => $response['total_tokens'] ?? 0,
 		];
 	}
 
@@ -456,6 +464,14 @@ class AISEO_OpenAI_Client {
 
 		if ( ! empty( $parsed['content'] ) ) {
 			$parsed['content'] = $this->enforce_shortcode_placement( $content, $parsed['content'] );
+		}
+
+		if ( empty( $parsed['meta_description'] ) ) {
+			$meta_res = $this->optimize_meta( $post_id, $keyword );
+			if ( ! empty( $meta_res['after'] ) ) {
+				$parsed['meta_description'] = $meta_res['after'];
+				$response['total_tokens']   = (int) ( $response['total_tokens'] ?? 0 ) + (int) ( $meta_res['tokens_used'] ?? 0 );
+			}
 		}
 
 		$current_seo_title = (string) get_post_meta( $post_id, '_yoast_wpseo_title', true );
