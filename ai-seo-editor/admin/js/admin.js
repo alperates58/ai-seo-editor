@@ -1463,6 +1463,8 @@
 		if (editorPanelEventsBound) return;
 		editorPanelEventsBound = true;
 
+		initYoastLiveSync(Config.postId);
+
 		document.addEventListener('click', async (event) => {
 			const target = event.target;
 			const button = target instanceof Element ? target.closest('button') : null;
@@ -2139,32 +2141,52 @@
 	function setNativeInputValue(element, value) {
 		if (!element) return false;
 		try {
-			if (element instanceof HTMLTextAreaElement) {
-				const descriptor = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value');
+			const isTextArea = element instanceof HTMLTextAreaElement;
+			const isInput = element instanceof HTMLInputElement;
+
+			if (isTextArea || isInput) {
+				const prototype = isTextArea ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+				const descriptor = Object.getOwnPropertyDescriptor(prototype, 'value');
+
+				// React 16/17/18 _valueTracker reset hack so onChange synthetic event fires
+				if (element._valueTracker) {
+					try {
+						element._valueTracker.setValue(value + '_prev_hack');
+					} catch (e) {}
+				}
+
 				if (descriptor && descriptor.set) {
 					descriptor.set.call(element, value);
 				} else {
 					element.value = value;
 				}
-			} else if (element instanceof HTMLInputElement) {
-				const descriptor = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
-				if (descriptor && descriptor.set) {
-					descriptor.set.call(element, value);
-				} else {
-					element.value = value;
-				}
-			} else if (element.isContentEditable || element.getAttribute('contenteditable') === 'true') {
-				element.textContent = value;
-			} else if ('value' in element && typeof element.value !== 'undefined') {
-				element.value = value;
-			} else {
-				return false;
+
+				// Dispatch all native, jQuery and React events
+				try { element.dispatchEvent(new Event('input', { bubbles: true, cancelable: true })); } catch (e) {}
+				try { element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true })); } catch (e) {}
+				try { element.dispatchEvent(new Event('blur', { bubbles: true, cancelable: true })); } catch (e) {}
+				try {
+					if (window.jQuery) {
+						window.jQuery(element).trigger('input').trigger('change').trigger('blur');
+					}
+				} catch (e) {}
+
+				return true;
 			}
 
-			element.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
-			element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
-			element.dispatchEvent(new Event('blur', { bubbles: true, cancelable: true }));
-			return true;
+			if (element.isContentEditable || element.getAttribute('contenteditable') === 'true') {
+				element.textContent = value;
+				try { element.dispatchEvent(new Event('input', { bubbles: true, cancelable: true })); } catch (e) {}
+				try { element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true })); } catch (e) {}
+				return true;
+			}
+
+			if ('value' in element && typeof element.value !== 'undefined') {
+				element.value = value;
+				try { element.dispatchEvent(new Event('input', { bubbles: true, cancelable: true })); } catch (e) {}
+				try { element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true })); } catch (e) {}
+				return true;
+			}
 		} catch (e) {
 			try {
 				if ('value' in element) {
@@ -2174,8 +2196,8 @@
 					return true;
 				}
 			} catch (e2) {}
-			return false;
 		}
+		return false;
 	}
 
 	function applyEditorTitle(title) {
@@ -2211,6 +2233,7 @@
 		const titleSelectors = [
 			'input#yoast-snippet-editor-title',
 			'input#yoast-google-preview-title-metabox',
+			'.yoast-field-group--title input',
 			'input[name="yoast_wpseo_title"]',
 			'input#yoast_wpseo_title',
 			'input#rank_math_title',
@@ -2226,12 +2249,42 @@
 			} catch (e) {}
 		});
 
-		// Yoast JS API
+		// Live preview title update
+		const titlePreviewSelectors = [
+			'#yoast-google-preview-title',
+			'.yoast-snippet-editor__title',
+			'.yoast-google-preview__title',
+			'[data-testid="snippet-preview-title"]',
+			'.yoast-snippet-editor-preview-title',
+			'.wpseo-snippet-title'
+		];
+		try {
+			titlePreviewSelectors.forEach((sel) => {
+				document.querySelectorAll(sel).forEach((previewEl) => {
+					if (!(previewEl instanceof HTMLInputElement)) {
+						previewEl.textContent = value;
+						previewEl.innerText = value;
+					}
+				});
+			});
+		} catch (e) {}
+
+		// Yoast JS API & Redux triggers
 		try {
 			if (window.YoastSEO?.app?.snippetEditor?.setTitle) {
 				window.YoastSEO.app.snippetEditor.setTitle(value);
 			} else if (window.YoastSEO?.wp?.snippetEditor?.setTitle) {
 				window.YoastSEO.wp.snippetEditor.setTitle(value);
+			}
+			if (window.YoastSEO?.app?.store?.dispatch) {
+				window.YoastSEO.app.store.dispatch({ type: 'SNIPPET_EDITOR_SET_TITLE', title: value });
+				window.YoastSEO.app.store.dispatch({ type: 'UPDATE_TITLE', title: value });
+				window.YoastSEO.app.store.dispatch({ type: 'SET_SEO_TITLE', title: value });
+			}
+			if (window.YoastSEO?.store?.dispatch) {
+				window.YoastSEO.store.dispatch({ type: 'SNIPPET_EDITOR_SET_TITLE', title: value });
+				window.YoastSEO.store.dispatch({ type: 'UPDATE_TITLE', title: value });
+				window.YoastSEO.store.dispatch({ type: 'SET_SEO_TITLE', title: value });
 			}
 		} catch (e) {}
 	}
@@ -2317,6 +2370,7 @@
 			'textarea#yoast-snippet-editor-metadesc',
 			'textarea#yoast-google-preview-description-metabox',
 			'textarea.yoast-field-group__textarea',
+			'.yoast-field-group--metadesc textarea',
 			'.yoast-snippet-editor__description textarea',
 			'textarea[name="yoast_wpseo_metadesc"]',
 			'textarea[name="_yoast_wpseo_metadesc"]',
@@ -2347,25 +2401,64 @@
 		});
 
 		// Live preview updater for Yoast / other preview containers
+		const previewSelectors = [
+			'#yoast-google-preview-description',
+			'.yoast-snippet-editor__description',
+			'.yoast-snippet-editor__description p',
+			'.yoast-google-preview__description',
+			'[data-testid="snippet-preview-description"]',
+			'.yoast-snippet-editor-preview-description',
+			'.snippet-editor__description',
+			'.snippet-editor__meta-description',
+			'.yoast-snippet-preview__description',
+			'.wpseo-snippet-description',
+			'.wpseo-google-preview-description',
+			'[class*="snippet-preview__description"]',
+			'[class*="google-preview__description"]'
+		];
 		try {
-			document.querySelectorAll('#yoast-google-preview-description, .yoast-snippet-editor__description p, [data-testid="snippet-preview-description"]').forEach((previewEl) => {
-				if (!(previewEl instanceof HTMLTextAreaElement) && !(previewEl instanceof HTMLInputElement)) {
-					previewEl.textContent = value;
-				}
+			previewSelectors.forEach((sel) => {
+				document.querySelectorAll(sel).forEach((previewEl) => {
+					if (!(previewEl instanceof HTMLTextAreaElement) && !(previewEl instanceof HTMLInputElement)) {
+						previewEl.textContent = value;
+						previewEl.innerText = value;
+					}
+				});
 			});
 		} catch (e) {}
 
-		// Yoast JS API hooks
+		// Yoast JS API hooks & Redux store dispatches
 		try {
 			if (window.YoastSEO?.app?.snippetEditor?.setDescription) {
 				window.YoastSEO.app.snippetEditor.setDescription(value);
 				applied = true;
-			} else if (window.YoastSEO?.wp?.snippetEditor?.setDescription) {
+			}
+			if (window.YoastSEO?.wp?.snippetEditor?.setDescription) {
 				window.YoastSEO.wp.snippetEditor.setDescription(value);
 				applied = true;
-			} else if (window.YoastSEO?.snippetPreview?.setDescription) {
+			}
+			if (window.YoastSEO?.snippetPreview?.setDescription) {
 				window.YoastSEO.snippetPreview.setDescription(value);
 				applied = true;
+			}
+			if (window.YoastSEO?.app?.store?.dispatch) {
+				window.YoastSEO.app.store.dispatch({ type: 'SNIPPET_EDITOR_SET_DESCRIPTION', description: value });
+				window.YoastSEO.app.store.dispatch({ type: 'UPDATE_DESCRIPTION', description: value });
+				window.YoastSEO.app.store.dispatch({ type: 'SET_META_DESCRIPTION', description: value });
+			}
+			if (window.YoastSEO?.store?.dispatch) {
+				window.YoastSEO.store.dispatch({ type: 'SNIPPET_EDITOR_SET_DESCRIPTION', description: value });
+				window.YoastSEO.store.dispatch({ type: 'UPDATE_DESCRIPTION', description: value });
+				window.YoastSEO.store.dispatch({ type: 'SET_META_DESCRIPTION', description: value });
+			}
+			if (window.wpseoPostScraper?.setCustomData) {
+				window.wpseoPostScraper.setCustomData('metadesc', value);
+			}
+			if (window.wpseoPostScraper?.updateSnippetPreview) {
+				window.wpseoPostScraper.updateSnippetPreview();
+			}
+			if (window.wpseoPostScraper?.runSnippetAnalysis) {
+				window.wpseoPostScraper.runSnippetAnalysis();
 			}
 		} catch (e) {}
 
@@ -2382,6 +2475,24 @@
 				const yoastEditor = window.wp.data.dispatch('yoast-seo/editor');
 				if (yoastEditor?.setDescription) {
 					yoastEditor.setDescription(value);
+					applied = true;
+				}
+				if (yoastEditor?.setMetaDescription) {
+					yoastEditor.setMetaDescription(value);
+					applied = true;
+				}
+				const yoastMetabox = window.wp.data.dispatch('yoast-seo/metabox');
+				if (yoastMetabox?.setDescription) {
+					yoastMetabox.setDescription(value);
+					applied = true;
+				}
+				if (yoastMetabox?.setMetaDescription) {
+					yoastMetabox.setMetaDescription(value);
+					applied = true;
+				}
+				const yoastSnippet = window.wp.data.dispatch('yoast-seo/snippet-editor');
+				if (yoastSnippet?.setDescription) {
+					yoastSnippet.setDescription(value);
 					applied = true;
 				}
 				const coreEditor = window.wp.data.dispatch('core/editor');
@@ -2419,6 +2530,44 @@
 				}
 				hiddenAiseo.value = value;
 			}
+		} catch (e) {}
+	}
+
+	function initYoastLiveSync(postId) {
+		const targetNode = document.getElementById('wpseo_meta') || document.getElementById('wpseo-metabox-root') || document.getElementById('normal-sortables');
+		if (!targetNode) return;
+
+		const syncPending = () => {
+			const pending = localStorage.getItem('aiseo_pending_meta_' + (postId || Config.postId));
+			if (!pending) return;
+
+			const textareas = document.querySelectorAll('textarea#yoast-snippet-editor-metadesc, textarea#yoast-google-preview-description-metabox, textarea.yoast-field-group__textarea, .yoast-field-group--metadesc textarea, textarea[name="yoast_wpseo_metadesc"], textarea[name="_yoast_wpseo_metadesc"]');
+			textareas.forEach((ta) => {
+				if (ta instanceof HTMLTextAreaElement && ta.value !== pending) {
+					setNativeInputValue(ta, pending);
+				}
+			});
+
+			const previews = document.querySelectorAll('#yoast-google-preview-description, .yoast-snippet-editor__description, .yoast-snippet-editor__description p, .yoast-google-preview__description, [data-testid="snippet-preview-description"]');
+			previews.forEach((p) => {
+				if (!(p instanceof HTMLTextAreaElement) && !(p instanceof HTMLInputElement) && p.textContent !== pending) {
+					p.textContent = pending;
+					p.innerText = pending;
+				}
+			});
+		};
+
+		targetNode.addEventListener('click', () => {
+			setTimeout(syncPending, 50);
+			setTimeout(syncPending, 200);
+			setTimeout(syncPending, 500);
+		});
+
+		try {
+			const observer = new MutationObserver(() => {
+				syncPending();
+			});
+			observer.observe(targetNode, { childList: true, subtree: true });
 		} catch (e) {}
 	}
 
