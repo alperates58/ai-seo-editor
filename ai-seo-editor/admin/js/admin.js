@@ -533,34 +533,34 @@
 		} catch (e) {}
 
 		const selectors = [
-			'#yoast-snippet-editor-metadesc',
 			'textarea#yoast-snippet-editor-metadesc',
-			'#yoast-google-preview-description-metabox',
-			'#yoast-google-preview-description',
-			'.yoast-snippet-editor__description textarea',
+			'textarea#yoast-google-preview-description-metabox',
 			'textarea.yoast-field-group__textarea',
-			'textarea[id*="yoast"][id*="metadesc"]',
-			'textarea[id*="yoast"][id*="description"]',
-			'#yoast_wpseo_metadesc',
-			'#_yoast_wpseo_metadesc',
+			'.yoast-snippet-editor__description textarea',
 			'textarea[name="yoast_wpseo_metadesc"]',
 			'textarea[name="_yoast_wpseo_metadesc"]',
+			'textarea#yoast_wpseo_metadesc',
+			'textarea#_yoast_wpseo_metadesc',
 			'input[name="yoast_wpseo_metadesc"]',
 			'input[name="_yoast_wpseo_metadesc"]',
-			'#rank_math_description',
+			'textarea[id*="metadesc"]',
+			'textarea[name*="metadesc"]',
+			'textarea#rank_math_description',
 			'textarea[name="rank_math_description"]',
 			'textarea.rank-math-description',
-			'#aioseo-post-settings-description',
+			'textarea#aioseo-post-settings-description',
 			'textarea[name="aioseo_description"]',
-			'#seopress_titles_desc',
+			'textarea#seopress_titles_desc',
 			'textarea[name="_seopress_titles_desc"]'
 		];
 
 		for (const selector of selectors) {
-			const field = document.querySelector(selector);
-			if (field && 'value' in field && String(field.value || '').trim()) {
-				return String(field.value || '').trim();
-			}
+			try {
+				const field = document.querySelector(selector);
+				if (field && (field instanceof HTMLTextAreaElement || field instanceof HTMLInputElement) && String(field.value || '').trim()) {
+					return String(field.value || '').trim();
+				}
+			} catch (e) {}
 		}
 
 		return localStorage.getItem('aiseo_pending_meta_' + (postId || Config.postId)) || '';
@@ -2138,20 +2138,44 @@
 
 	function setNativeInputValue(element, value) {
 		if (!element) return false;
-		const isTextArea = element.tagName && element.tagName.toLowerCase() === 'textarea';
-		const prototype = isTextArea ? window.HTMLTextAreaElement?.prototype : window.HTMLInputElement?.prototype;
-		const descriptor = prototype ? Object.getOwnPropertyDescriptor(prototype, 'value') : null;
+		try {
+			if (element instanceof HTMLTextAreaElement) {
+				const descriptor = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value');
+				if (descriptor && descriptor.set) {
+					descriptor.set.call(element, value);
+				} else {
+					element.value = value;
+				}
+			} else if (element instanceof HTMLInputElement) {
+				const descriptor = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
+				if (descriptor && descriptor.set) {
+					descriptor.set.call(element, value);
+				} else {
+					element.value = value;
+				}
+			} else if (element.isContentEditable || element.getAttribute('contenteditable') === 'true') {
+				element.textContent = value;
+			} else if ('value' in element && typeof element.value !== 'undefined') {
+				element.value = value;
+			} else {
+				return false;
+			}
 
-		if (descriptor && descriptor.set) {
-			descriptor.set.call(element, value);
-		} else {
-			element.value = value;
+			element.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+			element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+			element.dispatchEvent(new Event('blur', { bubbles: true, cancelable: true }));
+			return true;
+		} catch (e) {
+			try {
+				if ('value' in element) {
+					element.value = value;
+					element.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+					element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+					return true;
+				}
+			} catch (e2) {}
+			return false;
 		}
-
-		element.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
-		element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
-		element.dispatchEvent(new Event('blur', { bubbles: true, cancelable: true }));
-		return true;
 	}
 
 	function applyEditorTitle(title) {
@@ -2159,42 +2183,47 @@
 		if (!value) return;
 
 		// Gutenberg Dispatch
-		if (window.wp?.data?.dispatch) {
-			const editor = window.wp.data.dispatch('core/editor');
-			if (editor?.editPost) {
-				editor.editPost({
-					title: value,
-					meta: { _yoast_wpseo_title: value }
-				});
+		try {
+			if (window.wp?.data?.dispatch) {
+				const editor = window.wp.data.dispatch('core/editor');
+				if (editor?.editPost) {
+					editor.editPost({
+						title: value,
+						meta: { _yoast_wpseo_title: value }
+					});
+				}
+				const yoastEditor = window.wp.data.dispatch('yoast-seo/editor');
+				if (yoastEditor?.setTitle) {
+					yoastEditor.setTitle(value);
+				}
 			}
-			const yoastEditor = window.wp.data.dispatch('yoast-seo/editor');
-			if (yoastEditor?.setTitle) {
-				yoastEditor.setTitle(value);
-			}
-		}
+		} catch (e) {}
 
 		// WP standard title
-		const titleInput = document.getElementById('title');
-		if (titleInput) {
-			setNativeInputValue(titleInput, value);
-		}
+		try {
+			const titleInput = document.getElementById('title');
+			if (titleInput) {
+				setNativeInputValue(titleInput, value);
+			}
+		} catch (e) {}
 
 		// SEO plugins title selectors
 		const titleSelectors = [
-			'#yoast-snippet-editor-title',
-			'#yoast-google-preview-title-metabox',
-			'#yoast-google-preview-title',
+			'input#yoast-snippet-editor-title',
+			'input#yoast-google-preview-title-metabox',
 			'input[name="yoast_wpseo_title"]',
-			'#yoast_wpseo_title',
-			'#rank_math_title',
+			'input#yoast_wpseo_title',
+			'input#rank_math_title',
 			'input[name="rank_math_title"]',
-			'#aioseo-post-settings-title',
+			'input#aioseo-post-settings-title',
 			'input[name="aioseo_title"]'
 		];
 		titleSelectors.forEach((selector) => {
-			document.querySelectorAll(selector).forEach((field) => {
-				setNativeInputValue(field, value);
-			});
+			try {
+				document.querySelectorAll(selector).forEach((field) => {
+					setNativeInputValue(field, value);
+				});
+			} catch (e) {}
 		});
 
 		// Yoast JS API
@@ -2285,37 +2314,46 @@
 		localStorage.setItem('aiseo_pending_meta_' + (postId || Config.postId), value);
 
 		const selectors = [
-			'#yoast-snippet-editor-metadesc',
 			'textarea#yoast-snippet-editor-metadesc',
-			'#yoast-google-preview-description-metabox',
-			'#yoast-google-preview-description',
-			'.yoast-snippet-editor__description textarea',
+			'textarea#yoast-google-preview-description-metabox',
 			'textarea.yoast-field-group__textarea',
-			'textarea[id*="yoast"][id*="metadesc"]',
-			'textarea[id*="yoast"][id*="description"]',
-			'#yoast_wpseo_metadesc',
-			'#_yoast_wpseo_metadesc',
+			'.yoast-snippet-editor__description textarea',
 			'textarea[name="yoast_wpseo_metadesc"]',
 			'textarea[name="_yoast_wpseo_metadesc"]',
+			'textarea#yoast_wpseo_metadesc',
+			'textarea#_yoast_wpseo_metadesc',
 			'input[name="yoast_wpseo_metadesc"]',
 			'input[name="_yoast_wpseo_metadesc"]',
-			'#rank_math_description',
+			'textarea[id*="metadesc"]',
+			'textarea[name*="metadesc"]',
+			'textarea#rank_math_description',
 			'textarea[name="rank_math_description"]',
 			'textarea.rank-math-description',
-			'#aioseo-post-settings-description',
+			'textarea#aioseo-post-settings-description',
 			'textarea[name="aioseo_description"]',
-			'#seopress_titles_desc',
+			'textarea#seopress_titles_desc',
 			'textarea[name="_seopress_titles_desc"]'
 		];
 
 		let applied = false;
 		selectors.forEach((selector) => {
-			document.querySelectorAll(selector).forEach((field) => {
-				if (setNativeInputValue(field, value)) {
-					applied = true;
+			try {
+				document.querySelectorAll(selector).forEach((field) => {
+					if (setNativeInputValue(field, value)) {
+						applied = true;
+					}
+				});
+			} catch (e) {}
+		});
+
+		// Live preview updater for Yoast / other preview containers
+		try {
+			document.querySelectorAll('#yoast-google-preview-description, .yoast-snippet-editor__description p, [data-testid="snippet-preview-description"]').forEach((previewEl) => {
+				if (!(previewEl instanceof HTMLTextAreaElement) && !(previewEl instanceof HTMLInputElement)) {
+					previewEl.textContent = value;
 				}
 			});
-		});
+		} catch (e) {}
 
 		// Yoast JS API hooks
 		try {
@@ -2360,26 +2398,28 @@
 		} catch (e) {}
 
 		// Form fallback for Classic Editor form submission
-		const postForm = document.getElementById('post');
-		if (postForm) {
-			let hiddenYoast = postForm.querySelector('input[name="yoast_wpseo_metadesc"]');
-			if (!hiddenYoast) {
-				hiddenYoast = document.createElement('input');
-				hiddenYoast.type = 'hidden';
-				hiddenYoast.name = 'yoast_wpseo_metadesc';
-				postForm.appendChild(hiddenYoast);
-			}
-			hiddenYoast.value = value;
+		try {
+			const postForm = document.getElementById('post');
+			if (postForm) {
+				let hiddenYoast = postForm.querySelector('input[name="yoast_wpseo_metadesc"]');
+				if (!hiddenYoast) {
+					hiddenYoast = document.createElement('input');
+					hiddenYoast.type = 'hidden';
+					hiddenYoast.name = 'yoast_wpseo_metadesc';
+					postForm.appendChild(hiddenYoast);
+				}
+				hiddenYoast.value = value;
 
-			let hiddenAiseo = postForm.querySelector('input[name="_aiseo_meta_description"]');
-			if (!hiddenAiseo) {
-				hiddenAiseo = document.createElement('input');
-				hiddenAiseo.type = 'hidden';
-				hiddenAiseo.name = '_aiseo_meta_description';
-				postForm.appendChild(hiddenAiseo);
+				let hiddenAiseo = postForm.querySelector('input[name="_aiseo_meta_description"]');
+				if (!hiddenAiseo) {
+					hiddenAiseo = document.createElement('input');
+					hiddenAiseo.type = 'hidden';
+					hiddenAiseo.name = '_aiseo_meta_description';
+					postForm.appendChild(hiddenAiseo);
+				}
+				hiddenAiseo.value = value;
 			}
-			hiddenAiseo.value = value;
-		}
+		} catch (e) {}
 	}
 
 	function cleanTagList(tags) {
